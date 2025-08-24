@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+
 /**
  * Utility class for creating and parsing JSON Web Tokens (JWT).
  * A JWT is a compact, URL-safe token format consisting of three parts: header, payload, and signature.
