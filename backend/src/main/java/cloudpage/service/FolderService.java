@@ -5,9 +5,7 @@ import cloudpage.dto.FolderDto;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -16,12 +14,45 @@ import java.util.stream.Collectors;
 public class FolderService {
 
     public FolderDto getFolderTree(String rootPath) throws IOException {
-        Path path = Paths.get(rootPath);
-        if (!Files.exists(path) || !Files.isDirectory(path)) {
-            throw new IllegalArgumentException("Path does not exist or is not a directory: " + rootPath);
-        }
+        Path root = Paths.get(rootPath);
+        validateRoot(root);
+        return readFolder(root);
+    }
 
-        return readFolder(path);
+    public FolderDto getFolderTree(String rootPath, String relativePath) throws IOException {
+        Path folder = Paths.get(rootPath, relativePath).normalize();
+        validatePath(rootPath, folder);
+        return readFolder(folder);
+    }
+
+    public Path createFolder(String rootPath, String relativeParentPath, String name) throws IOException {
+        Path parent = Paths.get(rootPath, relativeParentPath).normalize();
+        validatePath(rootPath, parent);
+        Path newFolder = parent.resolve(name);
+        return Files.createDirectory(newFolder);
+    }
+
+    public void deleteFolder(String rootPath, String relativeFolderPath) throws IOException {
+        Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
+        validatePath(rootPath, folder);
+
+        Files.walk(folder)
+                .sorted((a, b) -> b.compareTo(a))
+                .forEach(p -> {
+                    try {
+                        Files.delete(p);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to delete: " + p, e);
+                    }
+                });
+    }
+
+    public void renameOrMoveFolder(String rootPath, String relativeFolderPath, String relativeNewPath) throws IOException {
+        Path source = Paths.get(rootPath, relativeFolderPath).normalize();
+        Path target = Paths.get(rootPath, relativeNewPath).normalize();
+        validatePath(rootPath, source);
+        validatePath(rootPath, target.getParent());
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private FolderDto readFolder(Path path) throws IOException {
@@ -54,5 +85,17 @@ public class FolderService {
                 .collect(Collectors.toList());
 
         return new FolderDto(path.getFileName().toString(), path.toAbsolutePath().toString(), subfolders, files);
+    }
+
+    public void validatePath(String rootPath, Path path) {
+        if (!path.toAbsolutePath().startsWith(Paths.get(rootPath).toAbsolutePath())) {
+            throw new IllegalArgumentException("Access outside the user's root folder is forbidden: " + path);
+        }
+    }
+
+    private void validateRoot(Path root) {
+        if (!Files.exists(root) || !Files.isDirectory(root)) {
+            throw new IllegalArgumentException("Root folder does not exist or is not a directory: " + root);
+        }
     }
 }
