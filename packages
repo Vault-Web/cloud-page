@@ -1,8 +1,8 @@
-cloudpage
-cloudpage.config
-cloudpage.repository
-cloudpage.security
-cloudpage.service
-cloudpage.dto
 cloudpage.model
+cloudpage.dto
+cloudpage
+cloudpage.service
+cloudpage.security
+cloudpage.config
 cloudpage.controller
+cloudpage.repository
