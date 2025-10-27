@@ -12,6 +12,7 @@ This service is designed to integrate seamlessly with **Vault Web**, sharing its
 - 🔹 **File Explorer-like API** for user files  
 - 🔹 **CRUD operations** on files and folders  
 - 🔹 **Secure access via JWT tokens** using Vault Web's master key  
+     **Pagination and sorting for file listings
 
 ---
 
@@ -69,6 +70,27 @@ Then visit:
 * Swagger UI: [http://localhost:8090/swagger-ui.html](http://localhost:8081/swagger-ui.html)
 
 ---
+
+Usage
+Pagination Example
+List files with pagination
+    GET /api/files/list?page=0&size=20&sort=name,asc
+Sample JSON response:
+{
+  "content": [
+    {
+      "name": "Doc1.txt",
+      "path": "/user/files/Doc1.txt",
+      "size": 12345,
+      "mimeType": "text/plain"
+    }
+    // ...
+  ],
+  "pageNumber": 0,
+  "totalElements": 52,
+  "totalPages": 3
+}
+
 
 ## Notes
 
