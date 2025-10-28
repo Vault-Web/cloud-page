@@ -131,24 +131,38 @@ public class FileController {
 }
 
 
-    @GetMapping("/view")
-    public ResponseEntity<Resource> viewFile(@RequestParam String path) throws IOException {
-        var user = userService.getCurrentUser();
-        Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-        folderService.validatePath(user.getRootFolderPath(), fullPath);
+   @GetMapping("/view")
+    public ResponseEntity<?> listFilesForView(
+            @RequestParam(required = false) String path,
+            @RequestParam(defaultValue = "0") int pageNumber,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) String sort) {
 
-        if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
-            throw new IllegalArgumentException("File does not exist: " + fullPath);
+        Pageable pageable;
+        if (sort != null && !sort.isEmpty()) {
+            pageable = PageRequest.of(pageNumber, pageSize, Sort.by(sort));
+        } else {
+            pageable = PageRequest.of(pageNumber, pageSize, Sort.by("fileId").descending());
         }
 
-        Resource resource = new UrlResource(fullPath.toUri());
-        String mimeType = Files.probeContentType(fullPath);
-        if (mimeType == null) {
-            mimeType = "application/octet-stream";
+        Page<File> filePage;
+
+        if (path == null || path.isEmpty()) {
+            filePage = fileRepository.findAllFiles(pageable);
+        } else {
+            filePage = fileRepository.searchAllFiles(pageable, path.toUpperCase());
         }
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, mimeType)
-                .body(resource);
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "File(s) available for viewing");
+        response.put("status", "success");
+        response.put("data", filePage.getContent());
+        response.put("totalFiles", filePage.getTotalElements());
+        response.put("totalPages", filePage.getTotalPages());
+        response.put("currentPage", filePage.getNumber());
+        response.put("code", 200);
+
+        return ResponseEntity.ok(response);
     }
+
 }
