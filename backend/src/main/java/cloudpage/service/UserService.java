@@ -1,5 +1,7 @@
 package cloudpage.service;
 
+import cloudpage.exceptions.ApiException;
+import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.model.User;
 import cloudpage.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,11 +18,11 @@ public class UserService {
     public User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
-            throw new RuntimeException("User not authenticated");
+            throw new ApiException("User is not authenticated");
         }
 
         String userName = auth.getName();
         return userRepository.findByUsername(userName)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User", "Username", userName));
     }
 }

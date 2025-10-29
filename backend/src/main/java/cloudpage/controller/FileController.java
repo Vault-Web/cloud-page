@@ -1,5 +1,6 @@
 package cloudpage.controller;
 
+import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.service.FileService;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
@@ -38,7 +39,7 @@ public class FileController {
         folderService.validatePath(user.getRootFolderPath(), fullPath);
 
         if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
-            throw new IllegalArgumentException("File does not exist: " + fullPath);
+            throw new ResourceNotFoundException("File", "FilePath", fullPath.toString());
         }
 
         String content = fileService.readFileContent(user.getRootFolderPath(), path);
@@ -75,7 +76,7 @@ public class FileController {
         folderService.validatePath(user.getRootFolderPath(), fullPath);
 
         if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
-            throw new IllegalArgumentException("File does not exist: " + fullPath);
+            throw new ResourceNotFoundException("File", "FilePath", fullPath.toString());
         }
 
         Resource resource = new UrlResource(fullPath.toUri());
