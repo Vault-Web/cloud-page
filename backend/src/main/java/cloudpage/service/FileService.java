@@ -1,7 +1,8 @@
 package cloudpage.service;
 
-import cloudpage.exceptions.ApiException;
+import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.exceptions.UnauthorizedAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -53,7 +54,7 @@ public class FileService {
 
     private void validatePath(String rootPath, Path path) {
         if (!path.toAbsolutePath().startsWith(Paths.get(rootPath).toAbsolutePath())) {
-            throw new ApiException("Access outside the user's root folder is forbidden: " + path);
+            throw new InvalidPathException("Access outside the user's root folder is forbidden: " + path);
         }
     }
 }

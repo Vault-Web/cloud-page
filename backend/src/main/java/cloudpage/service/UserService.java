@@ -1,7 +1,7 @@
 package cloudpage.service;
 
-import cloudpage.exceptions.ApiException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.exceptions.UnauthorizedAccessException;
 import cloudpage.model.User;
 import cloudpage.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ public class UserService {
     public User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
-            throw new ApiException("User is not authenticated");
+            throw new UnauthorizedAccessException("User is not authenticated");
         }
 
         String userName = auth.getName();
