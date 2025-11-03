@@ -2,6 +2,9 @@ package cloudpage.service;
 
 import cloudpage.dto.FileDto;
 import cloudpage.dto.FolderDto;
+import cloudpage.exceptions.FileDeletionException;
+import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.UnauthorizedAccessException;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -45,7 +48,7 @@ public class FolderService {
                     try {
                         Files.delete(p);
                     } catch (IOException e) {
-                        throw new RuntimeException("Failed to delete: " + p, e);
+                        throw new FileDeletionException("Failed to delete: " + p + "with exception : " + e.getMessage());
                     }
                 });
     }
@@ -65,7 +68,7 @@ public class FolderService {
                     try {
                         return readFolder(subPath);
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        throw new FileDeletionException("Failed to read: " + path + "with exception : " + e.getMessage());
                     }
                 })
                 .collect(Collectors.toList());
@@ -82,7 +85,7 @@ public class FolderService {
                                 Files.probeContentType(filePath)
                         );
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        throw new FileDeletionException("Failed to read: " + filePath + "with exception : " + e.getMessage());
                     }
                 })
                 .collect(Collectors.toList());
@@ -92,13 +95,13 @@ public class FolderService {
 
     public void validatePath(String rootPath, Path path) {
         if (!path.toAbsolutePath().startsWith(Paths.get(rootPath).toAbsolutePath())) {
-            throw new IllegalArgumentException("Access outside the user's root folder is forbidden: " + path);
+            throw new InvalidPathException("Access outside the user's root folder is forbidden: " + path);
         }
     }
 
     private void validateRoot(Path root) {
         if (!Files.exists(root) || !Files.isDirectory(root)) {
-            throw new IllegalArgumentException("Root folder does not exist or is not a directory: " + root);
+            throw new InvalidPathException("Root folder does not exist or is not a directory: " + root);
         }
     }
 }
