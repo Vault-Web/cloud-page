@@ -2,6 +2,7 @@ cloudpage
 cloudpage.config
 cloudpage.controller
 cloudpage.dto
+cloudpage.exceptions
 cloudpage.model
 cloudpage.repository
 cloudpage.security
