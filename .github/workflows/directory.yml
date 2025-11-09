@@ -23,12 +23,23 @@ jobs:
           extensions: ".java,.html,.ts,.scss"
           show-extensions: true
 
-      - name: Commit and push changes
+      - name: Commit changes if there are any
         run: |
           git config --global user.name "$GITHUB_ACTOR"
           git config --global user.email "$GITHUB_ACTOR@users.noreply.github.com"
           git add DIRECTORY.md
-          git diff --cached --quiet || git commit -m "Update DIRECTORY.md"
-          git push origin main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if ! git diff --cached --quiet; then
+            git commit -m "Update DIRECTORY.md"
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Create or update Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.TOKEN_DENIZ }}
+          branch: dependabot/directory-update
+          base: main
+          title: "Bump directory structure (auto-generated)"
+          body: "This PR updates DIRECTORY.md automatically."
+          draft: false
