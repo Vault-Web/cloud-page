@@ -16,6 +16,13 @@
         - 📁 **dto**
           - 📄 [FileDto.java](backend/src/main/java/cloudpage/dto/FileDto.java)
           - 📄 [FolderDto.java](backend/src/main/java/cloudpage/dto/FolderDto.java)
+        - 📁 **exceptions**
+          - 📄 [FileDeletionException.java](backend/src/main/java/cloudpage/exceptions/FileDeletionException.java)
+          - 📄 [FileNotFoundException.java](backend/src/main/java/cloudpage/exceptions/FileNotFoundException.java)
+          - 📄 [GlobalExceptionHandler.java](backend/src/main/java/cloudpage/exceptions/GlobalExceptionHandler.java)
+          - 📄 [InvalidPathException.java](backend/src/main/java/cloudpage/exceptions/InvalidPathException.java)
+          - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
+          - 📄 [UnauthorizedAccessException.java](backend/src/main/java/cloudpage/exceptions/UnauthorizedAccessException.java)
         - 📁 **model**
           - 📄 [User.java](backend/src/main/java/cloudpage/model/User.java)
         - 📁 **repository**
