@@ -1,12 +1,5 @@
 package cloudpage.service;
 
-import cloudpage.dto.FileDto;
-import cloudpage.dto.FolderDto;
-import cloudpage.exceptions.FileDeletionException;
-import cloudpage.exceptions.InvalidPathException;
-import cloudpage.exceptions.UnauthorizedAccessException;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +8,13 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
+import cloudpage.dto.FileDto;
+import cloudpage.dto.FolderDto;
+import cloudpage.exceptions.FileDeletionException;
+import cloudpage.exceptions.InvalidPathException;
 
 @Service
 public class FolderService {
@@ -82,7 +82,8 @@ public class FolderService {
                                 filePath.getFileName().toString(),
                                 filePath.toAbsolutePath().toString(),
                                 attrs.size(),
-                                Files.probeContentType(filePath)
+                                Files.probeContentType(filePath),
+                                attrs.lastModifiedTime().toMillis()
                         );
                     } catch (IOException e) {
                         throw new FileDeletionException("Failed to read: " + filePath + "with exception : " + e.getMessage());
@@ -90,7 +91,18 @@ public class FolderService {
                 })
                 .collect(Collectors.toList());
 
-        return new FolderDto(path.getFileName().toString(), path.toAbsolutePath().toString(), subfolders, files);
+        try {
+            BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
+            return new FolderDto(
+                    path.getFileName().toString(), 
+                    path.toAbsolutePath().toString(), 
+                    subfolders, 
+                    files,
+                    folderAttrs.lastModifiedTime().toMillis()
+            );
+        } catch (IOException e) {
+            throw new FileDeletionException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+        }
     }
 
     public void validatePath(String rootPath, Path path) {

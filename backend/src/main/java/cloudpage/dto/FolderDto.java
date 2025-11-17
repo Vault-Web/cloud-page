@@ -1,10 +1,10 @@
 package cloudpage.dto;
 
+import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.List;
 
 @Getter
 @Setter
@@ -14,4 +14,5 @@ public class FolderDto {
     private String path;
     private List<FolderDto> folders;
     private List<FileDto> files;
+    private long lastModifiedAt;
 }
