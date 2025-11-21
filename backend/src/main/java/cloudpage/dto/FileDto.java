@@ -8,8 +8,8 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 public class FileDto {
-    private String name;
-    private String path;
-    private long size;
-    private String mimeType;
+  private String name;
+  private String path;
+  private long size;
+  private String mimeType;
 }

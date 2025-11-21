@@ -5,11 +5,11 @@ package cloudpage.exceptions;
  */
 public class FileNotFoundException extends RuntimeException {
 
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    public FileNotFoundException() {}
+  public FileNotFoundException() {}
 
-    public FileNotFoundException(String message) {
-        super(message);
-    }
+  public FileNotFoundException(String message) {
+    super(message);
+  }
 }
