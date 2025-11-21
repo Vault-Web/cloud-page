@@ -1,14 +1,12 @@
 package cloudpage.exceptions;
 
-/**
- * class to handle File Deletion Exception
- */
+/** class to handle File Deletion Exception */
 public class FileDeletionException extends RuntimeException {
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    FileDeletionException() {}
+  FileDeletionException() {}
 
-    public FileDeletionException(String message) {
-        super(message);
-    }
+  public FileDeletionException(String message) {
+    super(message);
+  }
 }

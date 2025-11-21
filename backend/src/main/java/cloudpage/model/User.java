@@ -11,10 +11,9 @@ import lombok.Setter;
 @Getter
 @Setter
 public class User {
-    @Id
-    private String id;
+  @Id private String id;
 
-    private String username;
+  private String username;
 
-    private String rootFolderPath;
+  private String rootFolderPath;
 }

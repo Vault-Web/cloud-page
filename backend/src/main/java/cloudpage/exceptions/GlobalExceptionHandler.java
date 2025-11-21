@@ -8,28 +8,28 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 @ControllerAdvice(basePackages = "cloudpage.controller")
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(FileNotFoundException.class)
-    public ResponseEntity<String> handleFileNotFoundException(FileNotFoundException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
-    }
+  @ExceptionHandler(FileNotFoundException.class)
+  public ResponseEntity<String> handleFileNotFoundException(FileNotFoundException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
+  }
 
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<String> handleResourceNotFoundException(ResourceNotFoundException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
-    }
+  @ExceptionHandler(ResourceNotFoundException.class)
+  public ResponseEntity<String> handleResourceNotFoundException(ResourceNotFoundException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
+  }
 
-    @ExceptionHandler(UnauthorizedAccessException.class)
-    public ResponseEntity<String> handleUnauthorizedAccessException(UnauthorizedAccessException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNAUTHORIZED);
-    }
+  @ExceptionHandler(UnauthorizedAccessException.class)
+  public ResponseEntity<String> handleUnauthorizedAccessException(UnauthorizedAccessException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNAUTHORIZED);
+  }
 
-    @ExceptionHandler(InvalidPathException.class)
-    public ResponseEntity<String> handleInvalidPathException(InvalidPathException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
-    }
+  @ExceptionHandler(InvalidPathException.class)
+  public ResponseEntity<String> handleInvalidPathException(InvalidPathException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
+  }
 
-    @ExceptionHandler(FileDeletionException.class)
-    public ResponseEntity<String> handleFileDeletionException(FileDeletionException ex) {
-        return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
-    }
+  @ExceptionHandler(FileDeletionException.class)
+  public ResponseEntity<String> handleFileDeletionException(FileDeletionException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
+  }
 }
