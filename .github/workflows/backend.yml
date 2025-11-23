@@ -23,6 +23,10 @@ jobs:
           java-version: "21"
           cache: "maven"
 
+      - name: Run Spotless Check
+        working-directory: ./backend
+        run: ./mvnw spotless:check
+
       - name: Build with Maven
         working-directory: ./backend
         run: ./mvnw verify -DskipTests
