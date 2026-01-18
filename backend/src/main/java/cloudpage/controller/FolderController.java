@@ -1,9 +1,10 @@
 package cloudpage.controller;
 
-import cloudpage.dto.FolderDto;
+import cloudpage.dto.*;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
 import java.io.IOException;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -48,5 +49,17 @@ public class FolderController {
     var user = userService.getCurrentUser();
     folderService.renameOrMoveFolder(user.getRootFolderPath(), folderPath, newPath);
     return folderService.getFolderTree(user.getRootFolderPath());
+  }
+
+  @GetMapping("/search")
+  public List<SearchResult> searchInFolder(
+      @RequestParam String folderPath,
+      @RequestParam String query,
+      @RequestParam(defaultValue = "20") int maxResults,
+      @RequestParam(defaultValue = "60") int minScore)
+      throws IOException {
+    var user = userService.getCurrentUser();
+    return folderService.searchInFolder(
+        user.getRootFolderPath(), folderPath, query, maxResults, minScore);
   }
 }

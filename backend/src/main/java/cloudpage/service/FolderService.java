@@ -1,7 +1,6 @@
 package cloudpage.service;
 
-import cloudpage.dto.FileDto;
-import cloudpage.dto.FolderDto;
+import cloudpage.dto.*;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
@@ -12,10 +11,57 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FolderService {
+
+  private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  public List<SearchResult> searchInFolder(
+      String rootPath, String folderPath, String query, int maxResults, int minScore)
+      throws IOException {
+
+    Path folder = Paths.get(rootPath, folderPath).normalize();
+    validatePath(rootPath, folder);
+
+    String lowerQuery = query.toLowerCase();
+
+    return Files.walk(folder)
+        .filter(p -> !p.equals(folder))
+        .map(p -> createSearchResult(p, lowerQuery))
+        .filter(r -> r != null && r.getScore() >= minScore)
+        .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
+        .limit(maxResults)
+        .collect(Collectors.toList());
+  }
+
+  private SearchResult createSearchResult(Path path, String query) {
+    String name = path.getFileName().toString();
+    String lowerName = name.toLowerCase();
+
+    // Jaro-Winkler Score
+    int score = (int) (jaroWinkler.apply(lowerName, query) * 100);
+
+    // Boost für Substring
+    if (lowerName.contains(query)) {
+      score = Math.max(score, 95);
+    }
+
+    try {
+      boolean isDir = Files.isDirectory(path);
+      return new SearchResult(
+          name,
+          path.toString(),
+          isDir ? "folder" : "file",
+          isDir ? null : Files.size(path),
+          isDir ? null : Files.probeContentType(path),
+          score);
+    } catch (IOException e) {
+      return null;
+    }
+  }
 
   public FolderDto getFolderTree(String rootPath) throws IOException {
     Path root = Paths.get(rootPath);
