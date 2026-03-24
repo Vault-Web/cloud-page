@@ -9,6 +9,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import cloudpage.exceptions.FileReadException;
 import org.springframework.stereotype.Service;
 
 import cloudpage.dto.FileDto;
@@ -68,7 +69,7 @@ public class FolderService {
                     try {
                         return readFolder(subPath);
                     } catch (IOException e) {
-                        throw new FileDeletionException("Failed to read: " + path + "with exception : " + e.getMessage());
+                        throw new FileReadException("Failed to read: " + path + " with exception : " + e.getMessage());
                     }
                 })
                 .collect(Collectors.toList());
@@ -86,7 +87,7 @@ public class FolderService {
                                 attrs.lastModifiedTime().toMillis()
                         );
                     } catch (IOException e) {
-                        throw new FileDeletionException("Failed to read: " + filePath + "with exception : " + e.getMessage());
+                        throw new FileReadException("Failed to read: " + filePath + " with exception : " + e.getMessage());
                     }
                 })
                 .collect(Collectors.toList());
