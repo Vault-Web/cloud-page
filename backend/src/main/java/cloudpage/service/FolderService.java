@@ -19,14 +19,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
-import cloudpage.exceptions.FileReadException;
-import org.springframework.stereotype.Service;
-
-import cloudpage.dto.FileDto;
-import cloudpage.dto.FolderDto;
-import cloudpage.exceptions.FileDeletionException;
-import cloudpage.exceptions.InvalidPathException;
-
 @Service
 public class FolderService {
 
@@ -130,13 +122,14 @@ public class FolderService {
                     boolean isDirectory = Files.isDirectory(path);
                     long sizeValue = 0L;
                     String mimeType = null;
+                    long lastModifiedAt = 0L;
                     if (!isDirectory) {
                       try {
                         BasicFileAttributes attrs =
                             Files.readAttributes(path, BasicFileAttributes.class);
                         sizeValue = attrs.size();
                         mimeType = Files.probeContentType(path);
-
+                        lastModifiedAt = attrs.lastModifiedTime().toMillis();
                       } catch (IOException e) {
                         throw new FileAccessException(
                             "Failed to read file attributes: "
@@ -150,7 +143,8 @@ public class FolderService {
                         itemRelativePath,
                         isDirectory,
                         sizeValue,
-                        mimeType);
+                        mimeType,
+                        lastModifiedAt);
                   })
               .collect(Collectors.toList());
     }
@@ -252,7 +246,7 @@ public class FolderService {
                         relativePath,
                         attrs.size(),
                         Files.probeContentType(filePath),
-                            attrs.lastModifiedTime().toMillis());
+                        attrs.lastModifiedTime().toMillis());
                   } catch (IOException e) {
                     throw new FileAccessException(
                         "Failed to read file attributes: "
@@ -293,7 +287,7 @@ public class FolderService {
                   folderAttrs.lastModifiedTime().toMillis()
           );
       } catch (IOException e) {
-          throw new FileReadException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+          throw new FileAccessException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
       }
   }
 
