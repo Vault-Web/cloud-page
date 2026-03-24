@@ -13,16 +13,17 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class UserService {
 
-    private final UserRepository userRepository;
+  private final UserRepository userRepository;
 
-    public User getCurrentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            throw new UnauthorizedAccessException("User is not authenticated");
-        }
-
-        String userName = auth.getName();
-        return userRepository.findByUsername(userName)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "Username", userName));
+  public User getCurrentUser() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || !auth.isAuthenticated()) {
+      throw new UnauthorizedAccessException("User is not authenticated");
     }
+
+    String userName = auth.getName();
+    return userRepository
+        .findByUsername(userName)
+        .orElseThrow(() -> new ResourceNotFoundException("User", "Username", userName));
+  }
 }
