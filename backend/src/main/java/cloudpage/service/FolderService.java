@@ -102,7 +102,7 @@ public class FolderService {
                     folderAttrs.lastModifiedTime().toMillis()
             );
         } catch (IOException e) {
-            throw new FileDeletionException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+            throw new FileReadException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
         }
     }
 
