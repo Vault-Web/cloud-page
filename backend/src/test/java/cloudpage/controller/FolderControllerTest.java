@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc(addFilters = false)
 class FolderControllerTest {
 
-  static long FIXED_TIME = 1742824800000L;
+  private static final long FIXED_TIME = 1742824800000L;
 
   @Autowired private MockMvc mockMvc;
 
@@ -87,7 +87,8 @@ class FolderControllerTest {
     mockMvc
         .perform(get("/api/folders/path").param("path", "docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.name").value("docs"));
+        .andExpect(jsonPath("$.name").value("docs"))
+        .andExpect(jsonPath("$.lastModifiedAt").value(FIXED_TIME));
   }
 
   @Test
@@ -183,7 +184,9 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.totalPages").value(1))
         .andExpect(jsonPath("$.pageNumber").value(0))
         .andExpect(jsonPath("$.content[0].name").value("file1.txt"))
-        .andExpect(jsonPath("$.content[1].name").value("file2.txt"));
+        .andExpect(jsonPath("$.content[1].name").value("file2.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME))
+        .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null));
@@ -208,7 +211,8 @@ class FolderControllerTest {
                 .param("size", "10"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content.length()").value(1))
-        .andExpect(jsonPath("$.content[0].name").value("subfile.txt"));
+        .andExpect(jsonPath("$.content[0].name").value("subfile.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null));
@@ -234,7 +238,9 @@ class FolderControllerTest {
                 .param("sort", "name,asc"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content[0].name").value("apple.txt"))
-        .andExpect(jsonPath("$.content[1].name").value("zebra.txt"));
+        .andExpect(jsonPath("$.content[1].name").value("zebra.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME))
+        .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc"));

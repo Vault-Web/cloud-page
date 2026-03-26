@@ -7,12 +7,12 @@ import java.io.Serial;
  */
 public class FileDeletionException extends RuntimeException {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+  @Serial
+  private static final long serialVersionUID = 1L;
 
-    FileDeletionException() {}
+  FileDeletionException() {}
 
-    public FileDeletionException(String message) {
-        super(message);
-    }
+  public FileDeletionException(String message) {
+    super(message);
+  }
 }

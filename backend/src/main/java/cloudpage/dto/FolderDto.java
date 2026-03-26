@@ -10,9 +10,9 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 public class FolderDto {
-    private String name;
-    private String path;
-    private List<FolderDto> folders;
-    private List<FileDto> files;
-    private long lastModifiedAt;
+  private String name;
+  private String path;
+  private List<FolderDto> folders;
+  private List<FileDto> files;
+  private long lastModifiedAt;
 }

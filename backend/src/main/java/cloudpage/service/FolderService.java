@@ -122,29 +122,33 @@ public class FolderService {
                     boolean isDirectory = Files.isDirectory(path);
                     long sizeValue = 0L;
                     String mimeType = null;
-                    long lastModifiedAt = 0L;
-                    if (!isDirectory) {
-                      try {
-                        BasicFileAttributes attrs =
-                            Files.readAttributes(path, BasicFileAttributes.class);
+                    long lastModifiedAt;
+
+                    try {
+                      BasicFileAttributes attrs =
+                          Files.readAttributes(path, BasicFileAttributes.class);
+
+                      lastModifiedAt = attrs.lastModifiedTime().toMillis();
+
+                      if (!isDirectory) {
                         sizeValue = attrs.size();
                         mimeType = Files.probeContentType(path);
-                        lastModifiedAt = attrs.lastModifiedTime().toMillis();
-                      } catch (IOException e) {
-                        throw new FileAccessException(
-                            "Failed to read file attributes: "
-                                + path
-                                + " with exception: "
-                                + e.getMessage());
                       }
+                    } catch (IOException e) {
+                      throw new FileAccessException(
+                          "Failed to read file attributes: "
+                              + path
+                              + " with exception: "
+                              + e.getMessage());
                     }
+
                     return new FolderContentItemDto(
-                        path.getFileName().toString(),
-                        itemRelativePath,
-                        isDirectory,
-                        sizeValue,
-                        mimeType,
-                        lastModifiedAt);
+                      path.getFileName().toString(),
+                      itemRelativePath,
+                      isDirectory,
+                      sizeValue,
+                      mimeType,
+                      lastModifiedAt);
                   })
               .collect(Collectors.toList());
     }
@@ -277,18 +281,18 @@ public class FolderService {
       }
     }
 
-      try {
-          BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
-          return new FolderDto(
-                  path.getFileName().toString(),
-                  folderRelativePath,
-                  subfolders,
-                  files,
-                  folderAttrs.lastModifiedTime().toMillis()
-          );
+    try {
+      BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
+        return new FolderDto(
+          path.getFileName().toString(),
+          folderRelativePath,
+          subfolders,
+          files,
+          folderAttrs.lastModifiedTime().toMillis()
+        );
       } catch (IOException e) {
-          throw new FileAccessException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
-      }
+        throw new FileAccessException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+    }
   }
 
   public void validatePath(String rootPath, Path path) throws IOException {
