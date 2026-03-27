@@ -54,7 +54,12 @@ class FolderControllerTest {
     when(userService.getCurrentUser()).thenReturn(testUser);
 
     rootFolder =
-        new FolderDto("root", tempDir.toString(), Collections.emptyList(), Collections.emptyList(), FIXED_TIME);
+        new FolderDto(
+            "root",
+            tempDir.toString(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            FIXED_TIME);
   }
 
   // ── GET /api/folders ─────────────────────────────────────────────────────
@@ -167,8 +172,10 @@ class FolderControllerTest {
   void getFolderContent_validRequest_returnsPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Arrays.asList(
-            new FolderContentItemDto("file1.txt", "file1.txt", false, 100L, "text/plain", FIXED_TIME),
-            new FolderContentItemDto("file2.txt", "file2.txt", false, 200L, "text/plain", FIXED_TIME));
+            new FolderContentItemDto(
+                "file1.txt", "file1.txt", false, 100L, "text/plain", FIXED_TIME),
+            new FolderContentItemDto(
+                "file2.txt", "file2.txt", false, 200L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -196,7 +203,8 @@ class FolderControllerTest {
   void getFolderContent_withPath_returnsPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Collections.singletonList(
-            new FolderContentItemDto("subfile.txt", "docs/subfile.txt", false, 50L, "text/plain", FIXED_TIME));
+            new FolderContentItemDto(
+                "subfile.txt", "docs/subfile.txt", false, 50L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 1L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -222,8 +230,10 @@ class FolderControllerTest {
   void getFolderContent_withSort_returnsSortedPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Arrays.asList(
-            new FolderContentItemDto("apple.txt", "apple.txt", false, 100L, "text/plain", FIXED_TIME),
-            new FolderContentItemDto("zebra.txt", "zebra.txt", false, 200L, "text/plain", FIXED_TIME));
+            new FolderContentItemDto(
+                "apple.txt", "apple.txt", false, 100L, "text/plain", FIXED_TIME),
+            new FolderContentItemDto(
+                "zebra.txt", "zebra.txt", false, 200L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -318,7 +328,8 @@ class FolderControllerTest {
   void getFolderContent_secondPage_returnsCorrectPage() throws Exception {
     List<FolderContentItemDto> content =
         Collections.singletonList(
-            new FolderContentItemDto("file3.txt", "file3.txt", false, 300L, "text/plain", FIXED_TIME));
+            new FolderContentItemDto(
+                "file3.txt", "file3.txt", false, 300L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 3L, 2, 1);
 
     when(folderService.getFolderContentPage(eq(tempDir.toString()), eq(""), eq(1), eq(2), eq(null)))

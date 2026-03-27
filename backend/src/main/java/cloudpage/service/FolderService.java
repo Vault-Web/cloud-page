@@ -143,12 +143,12 @@ public class FolderService {
                     }
 
                     return new FolderContentItemDto(
-                      path.getFileName().toString(),
-                      itemRelativePath,
-                      isDirectory,
-                      sizeValue,
-                      mimeType,
-                      lastModifiedAt);
+                        path.getFileName().toString(),
+                        itemRelativePath,
+                        isDirectory,
+                        sizeValue,
+                        mimeType,
+                        lastModifiedAt);
                   })
               .collect(Collectors.toList());
     }
@@ -284,14 +284,14 @@ public class FolderService {
     try {
       BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
       return new FolderDto(
-        path.getFileName().toString(),
-        folderRelativePath,
-        subfolders,
-        files,
-        folderAttrs.lastModifiedTime().toMillis()
-      );
+          path.getFileName().toString(),
+          folderRelativePath,
+          subfolders,
+          files,
+          folderAttrs.lastModifiedTime().toMillis());
     } catch (IOException e) {
-      throw new FileAccessException("Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+      throw new FileAccessException(
+          "Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
     }
   }
 
