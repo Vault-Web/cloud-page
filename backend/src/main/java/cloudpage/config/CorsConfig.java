@@ -28,6 +28,9 @@ public class CorsConfig {
   public CorsFilter corsFilter() {
     CorsConfiguration config = new CorsConfiguration();
     config.addAllowedOrigin("http://localhost:4200");
+    config.addAllowedOrigin("https://localhost:4200");
+    config.addAllowedOrigin("http://127.0.0.1:4200");
+    config.addAllowedOrigin("https://127.0.0.1:4200");
     config.addAllowedHeader("*");
     config.addAllowedMethod("*");
     config.setAllowCredentials(true);
