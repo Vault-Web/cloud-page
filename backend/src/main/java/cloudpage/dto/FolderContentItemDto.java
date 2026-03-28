@@ -14,4 +14,5 @@ public class FolderContentItemDto {
   private boolean directory;
   private long size;
   private String mimeType;
+  private long lastModifiedAt;
 }
