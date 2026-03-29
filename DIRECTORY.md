@@ -15,8 +15,12 @@
           - 📄 [FolderController.java](backend/src/main/java/cloudpage/controller/FolderController.java)
         - 📁 **dto**
           - 📄 [FileDto.java](backend/src/main/java/cloudpage/dto/FileDto.java)
+          - 📄 [FileResource.java](backend/src/main/java/cloudpage/dto/FileResource.java)
+          - 📄 [FolderContentItemDto.java](backend/src/main/java/cloudpage/dto/FolderContentItemDto.java)
           - 📄 [FolderDto.java](backend/src/main/java/cloudpage/dto/FolderDto.java)
+          - 📄 [PageResponseDto.java](backend/src/main/java/cloudpage/dto/PageResponseDto.java)
         - 📁 **exceptions**
+          - 📄 [FileAccessException.java](backend/src/main/java/cloudpage/exceptions/FileAccessException.java)
           - 📄 [FileDeletionException.java](backend/src/main/java/cloudpage/exceptions/FileDeletionException.java)
           - 📄 [FileNotFoundException.java](backend/src/main/java/cloudpage/exceptions/FileNotFoundException.java)
           - 📄 [GlobalExceptionHandler.java](backend/src/main/java/cloudpage/exceptions/GlobalExceptionHandler.java)
@@ -39,3 +43,9 @@
     - 📁 **java**
       - 📁 **cloudpage**
         - 📄 [ApplicationTests.java](backend/src/test/java/cloudpage/ApplicationTests.java)
+        - 📁 **controller**
+          - 📄 [FileControllerTest.java](backend/src/test/java/cloudpage/controller/FileControllerTest.java)
+          - 📄 [FolderControllerTest.java](backend/src/test/java/cloudpage/controller/FolderControllerTest.java)
+        - 📁 **service**
+          - 📄 [FileServiceTest.java](backend/src/test/java/cloudpage/service/FileServiceTest.java)
+          - 📄 [FolderServiceTest.java](backend/src/test/java/cloudpage/service/FolderServiceTest.java)
