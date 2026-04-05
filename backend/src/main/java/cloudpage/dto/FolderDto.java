@@ -13,4 +13,5 @@ public class FolderDto {
   private String path;
   private List<FolderDto> folders;
   private List<FileDto> files;
+  private long lastModifiedAt;
 }

@@ -31,6 +31,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc(addFilters = false)
 class FolderControllerTest {
 
+  private static final long FIXED_TIME = 1742824800000L;
+
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private FolderService folderService;
@@ -52,7 +54,12 @@ class FolderControllerTest {
     when(userService.getCurrentUser()).thenReturn(testUser);
 
     rootFolder =
-        new FolderDto("root", tempDir.toString(), Collections.emptyList(), Collections.emptyList());
+        new FolderDto(
+            "root",
+            tempDir.toString(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            FIXED_TIME);
   }
 
   // ── GET /api/folders ─────────────────────────────────────────────────────
@@ -78,13 +85,15 @@ class FolderControllerTest {
             "docs",
             tempDir.resolve("docs").toString(),
             Collections.emptyList(),
-            Collections.emptyList());
+            Collections.emptyList(),
+            FIXED_TIME);
     when(folderService.getFolderTree(tempDir.toString(), "docs")).thenReturn(subFolder);
 
     mockMvc
         .perform(get("/api/folders/path").param("path", "docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.name").value("docs"));
+        .andExpect(jsonPath("$.name").value("docs"))
+        .andExpect(jsonPath("$.lastModifiedAt").value(FIXED_TIME));
   }
 
   @Test
@@ -163,8 +172,10 @@ class FolderControllerTest {
   void getFolderContent_validRequest_returnsPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Arrays.asList(
-            new FolderContentItemDto("file1.txt", "file1.txt", false, 100L, "text/plain"),
-            new FolderContentItemDto("file2.txt", "file2.txt", false, 200L, "text/plain"));
+            new FolderContentItemDto(
+                "file1.txt", "file1.txt", false, 100L, "text/plain", FIXED_TIME),
+            new FolderContentItemDto(
+                "file2.txt", "file2.txt", false, 200L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -180,7 +191,9 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.totalPages").value(1))
         .andExpect(jsonPath("$.pageNumber").value(0))
         .andExpect(jsonPath("$.content[0].name").value("file1.txt"))
-        .andExpect(jsonPath("$.content[1].name").value("file2.txt"));
+        .andExpect(jsonPath("$.content[1].name").value("file2.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME))
+        .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null));
@@ -190,7 +203,8 @@ class FolderControllerTest {
   void getFolderContent_withPath_returnsPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Collections.singletonList(
-            new FolderContentItemDto("subfile.txt", "docs/subfile.txt", false, 50L, "text/plain"));
+            new FolderContentItemDto(
+                "subfile.txt", "docs/subfile.txt", false, 50L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 1L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -205,7 +219,8 @@ class FolderControllerTest {
                 .param("size", "10"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content.length()").value(1))
-        .andExpect(jsonPath("$.content[0].name").value("subfile.txt"));
+        .andExpect(jsonPath("$.content[0].name").value("subfile.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null));
@@ -215,8 +230,10 @@ class FolderControllerTest {
   void getFolderContent_withSort_returnsSortedPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Arrays.asList(
-            new FolderContentItemDto("apple.txt", "apple.txt", false, 100L, "text/plain"),
-            new FolderContentItemDto("zebra.txt", "zebra.txt", false, 200L, "text/plain"));
+            new FolderContentItemDto(
+                "apple.txt", "apple.txt", false, 100L, "text/plain", FIXED_TIME),
+            new FolderContentItemDto(
+                "zebra.txt", "zebra.txt", false, 200L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
@@ -231,7 +248,9 @@ class FolderControllerTest {
                 .param("sort", "name,asc"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content[0].name").value("apple.txt"))
-        .andExpect(jsonPath("$.content[1].name").value("zebra.txt"));
+        .andExpect(jsonPath("$.content[1].name").value("zebra.txt"))
+        .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME))
+        .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
         .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc"));
@@ -309,7 +328,8 @@ class FolderControllerTest {
   void getFolderContent_secondPage_returnsCorrectPage() throws Exception {
     List<FolderContentItemDto> content =
         Collections.singletonList(
-            new FolderContentItemDto("file3.txt", "file3.txt", false, 300L, "text/plain"));
+            new FolderContentItemDto(
+                "file3.txt", "file3.txt", false, 300L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 3L, 2, 1);
 
     when(folderService.getFolderContentPage(eq(tempDir.toString()), eq(""), eq(1), eq(2), eq(null)))
