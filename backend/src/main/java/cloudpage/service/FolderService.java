@@ -2,6 +2,7 @@ package cloudpage.service;
 
 import cloudpage.dto.*;
 import cloudpage.exceptions.FileDeletionException;
+import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,6 +20,20 @@ public class FolderService {
 
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
 
+  /**
+   * Searches for files and folders within a given folder using the Jaro-Winkler similarity
+   * algorithm. Results are sorted by score in descending order.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param folderPath the relative path of the folder to search in
+   * @param query the search term to match against file and folder names
+   * @param maxResults the maximum number of results to return
+   * @param minScore the minimum similarity score (0-100) a result must have to be included
+   * @return a list of matching files and folders sorted by score descending
+   * @throws InvalidPathException if the folder path is outside the user's root directory
+   * @throws FileNotFoundException if the folder does not exist
+   * @throws IOException if an error occurs while walking the file tree
+   */
   public List<SearchResult> searchInFolder(
       String rootPath, String folderPath, String query, int maxResults, int minScore)
       throws IOException {
@@ -26,17 +41,31 @@ public class FolderService {
     Path folder = Paths.get(rootPath, folderPath).normalize();
     validatePath(rootPath, folder);
 
+    if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+      throw new FileNotFoundException("Folder not found: " + folderPath);
+    }
+
     String lowerQuery = query.toLowerCase();
 
     return Files.walk(folder)
         .filter(p -> !p.equals(folder))
         .map(p -> createSearchResult(p, lowerQuery))
-        .filter(r -> r != null && r.getScore() >= minScore)
+        .filter(r -> r.getScore() >= minScore)
         .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
         .limit(maxResults)
         .collect(Collectors.toList());
   }
 
+  /**
+   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query.
+   * The score is calculated using the Jaro-Winkler algorithm. If the file name contains the query
+   * as a substring, the score is boosted to at least 95.
+   *
+   * @param path the path of the file or folder to evaluate
+   * @param query the search term in lowercase
+   * @return a {@link SearchResult} with the calculated similarity score
+   * @throws FileNotFoundException if the file or folder metadata cannot be read
+   */
   private SearchResult createSearchResult(Path path, String query) {
     String name = path.getFileName().toString();
     String lowerName = name.toLowerCase();
@@ -59,7 +88,7 @@ public class FolderService {
           isDir ? null : Files.probeContentType(path),
           score);
     } catch (IOException e) {
-      return null;
+      throw new FileNotFoundException("Could not read file or folder: " + path);
     }
   }
 
