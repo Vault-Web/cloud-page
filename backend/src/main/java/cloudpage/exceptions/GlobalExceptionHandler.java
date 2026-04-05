@@ -32,4 +32,14 @@ public class GlobalExceptionHandler {
   public ResponseEntity<String> handleFileDeletionException(FileDeletionException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
+
+  @ExceptionHandler(FileAccessException.class)
+  public ResponseEntity<String> handleFileAccessException(FileAccessException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<String> handleIllegalArgumentException(IllegalArgumentException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
+  }
 }
