@@ -57,9 +57,38 @@ public class FileService {
     return Files.readString(file);
   }
 
-  private void validatePath(String rootPath, Path path) {
-    if (!path.toAbsolutePath().startsWith(Paths.get(rootPath).toAbsolutePath())) {
-      throw new InvalidPathException("Access outside the user's root folder is forbidden: " + path);
+  private void validatePath(String rootPath, Path path) throws IOException {
+    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
+    Path pathReal;
+
+    // If path exists, resolve symlinks to get the real path
+    if (Files.exists(path)) {
+      pathReal = path.toRealPath().normalize();
+    } else {
+      // For non-existent paths, resolve the parent if it exists
+      Path parent = path.getParent();
+      if (parent != null && Files.exists(parent)) {
+        Path parentReal = parent.toRealPath().normalize();
+        // Check if the resolved parent is within root
+        if (!parentReal.startsWith(rootReal)) {
+          throw new InvalidPathException("Path traversal attempt detected: " + path);
+        }
+        // Construct the child path from the resolved parent
+        Path fileName = path.getFileName();
+        if (fileName != null) {
+          pathReal = parentReal.resolve(fileName).normalize();
+        } else {
+          pathReal = parentReal;
+        }
+      } else {
+        // Parent doesn't exist or is null, validate using absolute path
+        // This is a fallback for edge cases
+        pathReal = path.toAbsolutePath().normalize();
+      }
+    }
+
+    if (!pathReal.startsWith(rootReal)) {
+      throw new InvalidPathException("Path traversal attempt detected: " + path);
     }
   }
 
