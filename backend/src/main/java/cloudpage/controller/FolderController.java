@@ -1,11 +1,13 @@
 package cloudpage.controller;
 
-import cloudpage.dto.*;
+import cloudpage.dto.FolderDto;
+import cloudpage.dto.SearchResult;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
 import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -52,14 +54,22 @@ public class FolderController {
   }
 
   @GetMapping("/search")
-  public List<SearchResult> searchInFolder(
+  public ResponseEntity<List<SearchResult>> searchInFolder(
       @RequestParam String folderPath,
       @RequestParam String query,
       @RequestParam(defaultValue = "20") int maxResults,
       @RequestParam(defaultValue = "60") int minScore)
       throws IOException {
+    if (query == null || query.isBlank()) {
+      return ResponseEntity.badRequest().build();
+    }
+    if (maxResults < 0) {
+      return ResponseEntity.badRequest().build();
+    }
+    int validatedMinScore = Math.max(0, Math.min(100, minScore));
     var user = userService.getCurrentUser();
-    return folderService.searchInFolder(
-        user.getRootFolderPath(), folderPath, query, maxResults, minScore);
+    return ResponseEntity.ok(
+        folderService.searchInFolder(
+            user.getRootFolderPath(), folderPath, query, maxResults, validatedMinScore));
   }
 }

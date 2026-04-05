@@ -1,6 +1,8 @@
 package cloudpage.service;
 
-import cloudpage.dto.*;
+import cloudpage.dto.FileDto;
+import cloudpage.dto.FolderDto;
+import cloudpage.dto.SearchResult;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
@@ -11,6 +13,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
@@ -45,21 +48,24 @@ public class FolderService {
       throw new FileNotFoundException("Folder not found: " + folderPath);
     }
 
-    String lowerQuery = query.toLowerCase();
+    // Locale.ROOT prevents using the system's local language for case conversion
+    String lowerQuery = query.toLowerCase(Locale.ROOT);
 
-    return Files.walk(folder)
-        .filter(p -> !p.equals(folder))
-        .map(p -> createSearchResult(p, lowerQuery))
-        .filter(r -> r.getScore() >= minScore)
-        .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
-        .limit(maxResults)
-        .collect(Collectors.toList());
+    try (var stream = Files.walk(folder)) {
+      return stream
+          .filter(p -> !p.equals(folder))
+          .map(p -> createSearchResult(p, lowerQuery))
+          .filter(r -> r.getScore() >= minScore)
+          .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
+          .limit(maxResults)
+          .collect(Collectors.toList());
+    }
   }
 
   /**
-   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query.
-   * The score is calculated using the Jaro-Winkler algorithm. If the file name contains the query
-   * as a substring, the score is boosted to at least 95.
+   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query. The
+   * score is calculated using the Jaro-Winkler algorithm. If the file name contains the query as a
+   * substring, the score is boosted to at least 95.
    *
    * @param path the path of the file or folder to evaluate
    * @param query the search term in lowercase
@@ -68,7 +74,8 @@ public class FolderService {
    */
   private SearchResult createSearchResult(Path path, String query) {
     String name = path.getFileName().toString();
-    String lowerName = name.toLowerCase();
+    // Locale.ROOT prevents using the system's local language for case conversion
+    String lowerName = name.toLowerCase(Locale.ROOT);
 
     // Jaro-Winkler Score
     int score = (int) (jaroWinkler.apply(lowerName, query) * 100);
@@ -116,17 +123,19 @@ public class FolderService {
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
 
-    Files.walk(folder)
-        .sorted((a, b) -> b.compareTo(a))
-        .forEach(
-            p -> {
-              try {
-                Files.delete(p);
-              } catch (IOException e) {
-                throw new FileDeletionException(
-                    "Failed to delete: " + p + "with exception : " + e.getMessage());
-              }
-            });
+    try (var stream = Files.walk(folder)) {
+      stream
+          .sorted((a, b) -> b.compareTo(a))
+          .forEach(
+              p -> {
+                try {
+                  Files.delete(p);
+                } catch (IOException e) {
+                  throw new FileDeletionException(
+                      "Failed to delete: " + p + "with exception : " + e.getMessage());
+                }
+              });
+    }
   }
 
   public void renameOrMoveFolder(String rootPath, String relativeFolderPath, String relativeNewPath)
