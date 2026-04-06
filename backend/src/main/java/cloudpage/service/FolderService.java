@@ -1,11 +1,9 @@
 package cloudpage.service;
 
-import cloudpage.dto.FileDto;
-import cloudpage.dto.FolderContentItemDto;
-import cloudpage.dto.FolderDto;
-import cloudpage.dto.PageResponseDto;
+import cloudpage.dto.*;
 import cloudpage.exceptions.FileAccessException;
 import cloudpage.exceptions.FileDeletionException;
+import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,11 +14,91 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
+import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FolderService {
+
+  private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  /**
+   * Searches for files and folders within a given folder using the Jaro-Winkler similarity
+   * algorithm. Results are sorted by score in descending order.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param folderPath the relative path of the folder to search in
+   * @param query the search term to match against file and folder names
+   * @param maxResults the maximum number of results to return
+   * @param minScore the minimum similarity score (0-100) a result must have to be included
+   * @return a list of matching files and folders sorted by score descending
+   * @throws InvalidPathException if the folder path is outside the user's root directory
+   * @throws FileNotFoundException if the folder does not exist
+   * @throws IOException if an error occurs while walking the file tree
+   */
+  public List<SearchResult> searchInFolder(
+      String rootPath, String folderPath, String query, int maxResults, int minScore)
+      throws IOException {
+
+    Path folder = Paths.get(rootPath, folderPath).normalize();
+    validatePath(rootPath, folder);
+
+    if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+      throw new FileNotFoundException("Folder not found: " + folderPath);
+    }
+
+    // Locale.ROOT prevents using the system's local language for case conversion
+    String lowerQuery = query.toLowerCase(Locale.ROOT);
+
+    try (var stream = Files.walk(folder)) {
+      return stream
+          .filter(p -> !p.equals(folder))
+          .map(p -> createSearchResult(p, lowerQuery))
+          .filter(r -> r.getScore() >= minScore)
+          .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
+          .limit(maxResults)
+          .collect(Collectors.toList());
+    }
+  }
+
+  /**
+   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query. The
+   * score is calculated using the Jaro-Winkler algorithm. If the file name contains the query as a
+   * substring, the score is boosted to at least 95.
+   *
+   * @param path the path of the file or folder to evaluate
+   * @param query the search term in lowercase
+   * @return a {@link SearchResult} with the calculated similarity score
+   * @throws FileNotFoundException if the file or folder metadata cannot be read
+   */
+  private SearchResult createSearchResult(Path path, String query) {
+    String name = path.getFileName().toString();
+    // Locale.ROOT prevents using the system's local language for case conversion
+    String lowerName = name.toLowerCase(Locale.ROOT);
+
+    // Jaro-Winkler Score
+    int score = (int) (jaroWinkler.apply(lowerName, query) * 100);
+
+    // Boost für Substring
+    if (lowerName.contains(query)) {
+      score = Math.max(score, 95);
+    }
+
+    try {
+      boolean isDir = Files.isDirectory(path);
+      return new SearchResult(
+          name,
+          path.toString(),
+          isDir ? "folder" : "file",
+          isDir ? null : Files.size(path),
+          isDir ? null : Files.probeContentType(path),
+          score);
+    } catch (IOException e) {
+      throw new FileNotFoundException("Could not read file or folder: " + path);
+    }
+  }
 
   public FolderDto getFolderTree(String rootPath) throws IOException {
     Path root = Paths.get(rootPath);
@@ -46,17 +124,19 @@ public class FolderService {
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
 
-    Files.walk(folder)
-        .sorted((a, b) -> b.compareTo(a))
-        .forEach(
-            p -> {
-              try {
-                Files.delete(p);
-              } catch (IOException e) {
-                throw new FileDeletionException(
-                    "Failed to delete: " + p + " with exception: " + e.getMessage());
-              }
-            });
+    try (var stream = Files.walk(folder)) {
+      stream
+          .sorted((a, b) -> b.compareTo(a))
+          .forEach(
+              p -> {
+                try {
+                  Files.delete(p);
+                } catch (IOException e) {
+                  throw new FileDeletionException(
+                      "Failed to delete: " + p + "with exception : " + e.getMessage());
+                }
+              });
+    }
   }
 
   public void renameOrMoveFolder(String rootPath, String relativeFolderPath, String relativeNewPath)
