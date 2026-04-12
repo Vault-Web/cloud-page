@@ -28,11 +28,11 @@ public class FolderController {
 
   @GetMapping("/content")
   public PageResponseDto<FolderContentItemDto> getFolderContent(
-          @RequestParam(required = false, defaultValue = "") String path,
-          @RequestParam int page,
-          @RequestParam int size,
-          @RequestParam(required = false) String sort)
-          throws IOException {
+      @RequestParam(required = false, defaultValue = "") String path,
+      @RequestParam int page,
+      @RequestParam int size,
+      @RequestParam(required = false) String sort)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
