@@ -45,7 +45,7 @@ class FileServiceTest {
     MockMultipartFile file =
         new MockMultipartFile("file", "data.txt", "text/plain", "content".getBytes());
 
-    fileService.uploadFile(tempDir.toString(), "newdir", file,null);
+    fileService.uploadFile(tempDir.toString(), "newdir", file, null);
 
     assertTrue(Files.isDirectory(tempDir.resolve("newdir")));
     assertTrue(Files.exists(tempDir.resolve("newdir/data.txt")));
@@ -71,7 +71,7 @@ class FileServiceTest {
 
     assertThrows(
         InvalidPathException.class,
-        () -> fileService.uploadFile(tempDir.toString(), "../../etc", file,null));
+        () -> fileService.uploadFile(tempDir.toString(), "../../etc", file, null));
   }
 
   // ── deleteFile ───────────────────────────────────────────────────────────

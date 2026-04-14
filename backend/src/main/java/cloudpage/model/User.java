@@ -17,5 +17,5 @@ public class User {
 
   private String rootFolderPath;
 
-  private Long storageQuotaMb; //new field
+  private Long storageQuotaMb; // new field
 }
