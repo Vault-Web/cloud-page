@@ -29,9 +29,14 @@ public class FileController {
   @PostMapping("/upload")
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
       throws IOException {
-    var user = userService.getCurrentUser();
-    fileService.uploadFile(user.getRootFolderPath(), folderPath, file);
-  }
+      var user = userService.getCurrentUser();
+      fileService.uploadFile(
+      user.getRootFolderPath(),
+      folderPath,
+      file,
+      user.getStorageQuotaMb()
+    );
+ }
 
   @GetMapping("/content")
   public ResponseEntity<String> getFileContent(@RequestParam String path) throws IOException {

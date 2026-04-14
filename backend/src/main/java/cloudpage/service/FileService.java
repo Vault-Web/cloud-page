@@ -18,7 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class FileService {
 
-  public void uploadFile(String rootPath, String relativeFolderPath, MultipartFile file)
+  public void uploadFile(String rootPath, String relativeFolderPath, MultipartFile file,Long quotaMb)
       throws IOException {
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
@@ -26,6 +26,18 @@ public class FileService {
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
     }
+    long newFileSize = file.getSize();
+    long currentSize = calculateDirectorySize(Paths.get(rootPath));
+
+    if (quotaMb != null) {
+      long quotaBytes = quotaMb * 1024 * 1024;
+
+    if (currentSize + newFileSize > quotaBytes) {
+      throw new IllegalArgumentException(
+        "Upload rejected: storage limit of " + quotaMb + " MB reached. Please delete files to free space."
+       );
+    }
+  }
 
     Path target = folder.resolve(file.getOriginalFilename());
     Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
@@ -106,4 +118,18 @@ public class FileService {
 
     return new FileResource(resource, etag, lastModified);
   }
+  private long calculateDirectorySize(Path path) throws IOException {
+  if (!Files.exists(path)) return 0;
+
+  return Files.walk(path)
+      .filter(Files::isRegularFile)
+      .mapToLong(p -> {
+        try {
+          return Files.size(p);
+        } catch (IOException e) {
+          return 0;
+        }
+      })
+      .sum();
+}
 }
