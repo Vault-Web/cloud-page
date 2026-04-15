@@ -30,7 +30,7 @@ public class FileController {
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
       throws IOException {
     var user = userService.getCurrentUser();
-    fileService.uploadFile(user.getRootFolderPath(), folderPath, file);
+    fileService.uploadFile(user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb());
   }
 
   @GetMapping("/content")

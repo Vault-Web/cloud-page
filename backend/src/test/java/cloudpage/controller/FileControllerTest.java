@@ -62,7 +62,7 @@ class FileControllerTest {
         .perform(multipart("/api/files/upload").file(file).param("folderPath", "docs"))
         .andExpect(status().isOk());
 
-    verify(fileService).uploadFile(eq(tempDir.toString()), eq("docs"), any());
+    verify(fileService).uploadFile(eq(tempDir.toString()), eq("docs"), any(), any());
   }
 
   @Test
@@ -76,7 +76,7 @@ class FileControllerTest {
 
   @Test
   void getFileContent_existingFile_returnsContent() throws Exception {
-    Path file = Files.writeString(tempDir.resolve("hello.txt"), "Hello World");
+    Files.writeString(tempDir.resolve("hello.txt"), "Hello World");
     when(fileService.readFileContent(tempDir.toString(), "hello.txt")).thenReturn("Hello World");
 
     mockMvc
@@ -143,7 +143,7 @@ class FileControllerTest {
 
   @Test
   void viewFile_existingFile_returnsResourceWithContentType() throws Exception {
-    Path file = Files.writeString(tempDir.resolve("view.txt"), "viewme");
+    Files.writeString(tempDir.resolve("view.txt"), "viewme");
 
     mockMvc
         .perform(get("/api/files/view").param("path", "view.txt"))
