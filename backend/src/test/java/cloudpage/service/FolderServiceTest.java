@@ -47,7 +47,7 @@ class FolderServiceTest {
   }
 
   @Test
-  void getFolderTree_nestedFoldersWithFiles_returnsFullTree() throws IOException {
+  void getFolderTree_nestedFoldersWithFiles_returnsShallowTree() throws IOException {
     Path sub = Files.createDirectory(tempDir.resolve("sub"));
     Files.writeString(tempDir.resolve("root.txt"), "root");
     Files.writeString(sub.resolve("child.txt"), "child");
@@ -57,8 +57,8 @@ class FolderServiceTest {
     assertEquals(1, tree.getFiles().size());
     assertEquals(1, tree.getFolders().size());
     assertEquals("sub", tree.getFolders().get(0).getName());
-    assertEquals(1, tree.getFolders().get(0).getFiles().size());
-    assertEquals("child.txt", tree.getFolders().get(0).getFiles().get(0).getName());
+    assertTrue(tree.getFolders().get(0).getFiles().isEmpty());
+    assertTrue(tree.getFolders().get(0).getFolders().isEmpty());
   }
 
   @Test

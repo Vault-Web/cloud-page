@@ -14,4 +14,5 @@ public class FolderDto {
   private List<FolderDto> folders;
   private List<FileDto> files;
   private long lastModifiedAt;
+  private long directChildrenCount;
 }

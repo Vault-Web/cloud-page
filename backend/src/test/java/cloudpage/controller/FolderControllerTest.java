@@ -59,7 +59,8 @@ class FolderControllerTest {
             tempDir.toString(),
             Collections.emptyList(),
             Collections.emptyList(),
-            FIXED_TIME);
+            FIXED_TIME,
+            0L);
   }
 
   // ── GET /api/folders ─────────────────────────────────────────────────────
@@ -86,7 +87,8 @@ class FolderControllerTest {
             tempDir.resolve("docs").toString(),
             Collections.emptyList(),
             Collections.emptyList(),
-            FIXED_TIME);
+            FIXED_TIME,
+            0L);
     when(folderService.getFolderTree(tempDir.toString(), "docs")).thenReturn(subFolder);
 
     mockMvc
