@@ -57,8 +57,18 @@ class FolderServiceTest {
     assertEquals(1, tree.getFiles().size());
     assertEquals(1, tree.getFolders().size());
     assertEquals("sub", tree.getFolders().get(0).getName());
-    assertTrue(tree.getFolders().get(0).getFiles().isEmpty());
-    assertTrue(tree.getFolders().get(0).getFolders().isEmpty());
+    assertEquals(-1L, tree.getFolders().get(0).getDirectChildrenCount());
+  }
+
+  @Test
+  void getFolderTree_includeChildCountsTrue_returnsChildCounts() throws IOException {
+    Path sub = Files.createDirectory(tempDir.resolve("sub"));
+    Files.writeString(sub.resolve("child.txt"), "child");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString(), true);
+
+    assertEquals(1, tree.getFolders().size());
+    assertEquals(1L, tree.getFolders().get(0).getDirectChildrenCount());
   }
 
   @Test

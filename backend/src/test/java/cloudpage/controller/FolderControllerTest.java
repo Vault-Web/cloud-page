@@ -59,15 +59,14 @@ class FolderControllerTest {
             tempDir.toString(),
             Collections.emptyList(),
             Collections.emptyList(),
-            FIXED_TIME,
-            0L);
+            FIXED_TIME);
   }
 
   // ── GET /api/folders ─────────────────────────────────────────────────────
 
   @Test
   void getUserRootFolder_returnsRootFolderDto() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString())).thenReturn(rootFolder);
+    when(folderService.getFolderTree(tempDir.toString(), false)).thenReturn(rootFolder);
 
     mockMvc
         .perform(get("/api/folders"))
@@ -87,9 +86,8 @@ class FolderControllerTest {
             tempDir.resolve("docs").toString(),
             Collections.emptyList(),
             Collections.emptyList(),
-            FIXED_TIME,
-            0L);
-    when(folderService.getFolderTree(tempDir.toString(), "docs")).thenReturn(subFolder);
+            FIXED_TIME);
+    when(folderService.getFolderTree(tempDir.toString(), "docs", false)).thenReturn(subFolder);
 
     mockMvc
         .perform(get("/api/folders/path").param("path", "docs"))
@@ -100,7 +98,7 @@ class FolderControllerTest {
 
   @Test
   void getFolderByPath_invalidPath_returns400() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString(), "../../evil"))
+    when(folderService.getFolderTree(tempDir.toString(), "../../evil", false))
         .thenThrow(new InvalidPathException("Access outside the user's root folder is forbidden"));
 
     mockMvc

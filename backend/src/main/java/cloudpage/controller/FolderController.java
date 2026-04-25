@@ -21,9 +21,11 @@ public class FolderController {
   private final UserService userService;
 
   @GetMapping
-  public FolderDto getUserRootFolder() throws IOException {
+  public FolderDto getUserRootFolder(
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
+      throws IOException {
     var user = userService.getCurrentUser();
-    return folderService.getFolderTree(user.getRootFolderPath());
+    return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
   @GetMapping("/content")
@@ -45,9 +47,12 @@ public class FolderController {
   }
 
   @GetMapping("/path")
-  public FolderDto getFolderByPath(@RequestParam String path) throws IOException {
+  public FolderDto getFolderByPath(
+      @RequestParam String path,
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
+      throws IOException {
     var user = userService.getCurrentUser();
-    return folderService.getFolderTree(user.getRootFolderPath(), path);
+    return folderService.getFolderTree(user.getRootFolderPath(), path, includeChildCounts);
   }
 
   @PostMapping
