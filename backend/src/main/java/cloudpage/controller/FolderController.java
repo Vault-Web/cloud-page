@@ -21,9 +21,11 @@ public class FolderController {
   private final UserService userService;
 
   @GetMapping
-  public FolderDto getUserRootFolder() throws IOException {
+  public FolderDto getUserRootFolder(
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
+      throws IOException {
     var user = userService.getCurrentUser();
-    return folderService.getFolderTree(user.getRootFolderPath());
+    return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
   @GetMapping("/content")
@@ -45,32 +47,44 @@ public class FolderController {
   }
 
   @GetMapping("/path")
-  public FolderDto getFolderByPath(@RequestParam String path) throws IOException {
+  public FolderDto getFolderByPath(
+      @RequestParam String path,
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
+      throws IOException {
     var user = userService.getCurrentUser();
-    return folderService.getFolderTree(user.getRootFolderPath(), path);
+    return folderService.getFolderTree(user.getRootFolderPath(), path, includeChildCounts);
   }
 
   @PostMapping
-  public FolderDto createFolder(@RequestParam String parentPath, @RequestParam String name)
+  public FolderDto createFolder(
+      @RequestParam String parentPath,
+      @RequestParam String name,
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
       throws IOException {
     var user = userService.getCurrentUser();
     folderService.createFolder(user.getRootFolderPath(), parentPath, name);
-    return folderService.getFolderTree(user.getRootFolderPath());
+    return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
   @DeleteMapping
-  public FolderDto deleteFolder(@RequestParam String folderPath) throws IOException {
+  public FolderDto deleteFolder(
+      @RequestParam String folderPath,
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
+      throws IOException {
     var user = userService.getCurrentUser();
     folderService.deleteFolder(user.getRootFolderPath(), folderPath);
-    return folderService.getFolderTree(user.getRootFolderPath());
+    return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
   @PatchMapping
-  public FolderDto renameOrMoveFolder(@RequestParam String folderPath, @RequestParam String newPath)
+  public FolderDto renameOrMoveFolder(
+      @RequestParam String folderPath,
+      @RequestParam String newPath,
+      @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
       throws IOException {
     var user = userService.getCurrentUser();
     folderService.renameOrMoveFolder(user.getRootFolderPath(), folderPath, newPath);
-    return folderService.getFolderTree(user.getRootFolderPath());
+    return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
   @GetMapping("/search")

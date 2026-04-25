@@ -66,7 +66,7 @@ class FolderControllerTest {
 
   @Test
   void getUserRootFolder_returnsRootFolderDto() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString())).thenReturn(rootFolder);
+    when(folderService.getFolderTree(tempDir.toString(), false)).thenReturn(rootFolder);
 
     mockMvc
         .perform(get("/api/folders"))
@@ -87,7 +87,7 @@ class FolderControllerTest {
             Collections.emptyList(),
             Collections.emptyList(),
             FIXED_TIME);
-    when(folderService.getFolderTree(tempDir.toString(), "docs")).thenReturn(subFolder);
+    when(folderService.getFolderTree(tempDir.toString(), "docs", false)).thenReturn(subFolder);
 
     mockMvc
         .perform(get("/api/folders/path").param("path", "docs"))
@@ -98,7 +98,7 @@ class FolderControllerTest {
 
   @Test
   void getFolderByPath_invalidPath_returns400() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString(), "../../evil"))
+    when(folderService.getFolderTree(tempDir.toString(), "../../evil", false))
         .thenThrow(new InvalidPathException("Access outside the user's root folder is forbidden"));
 
     mockMvc
@@ -112,7 +112,7 @@ class FolderControllerTest {
   void createFolder_validRequest_returnsUpdatedTree() throws Exception {
     when(folderService.createFolder(tempDir.toString(), "docs", "newDir"))
         .thenReturn(tempDir.resolve("docs/newDir"));
-    when(folderService.getFolderTree(tempDir.toString())).thenReturn(rootFolder);
+    when(folderService.getFolderTree(tempDir.toString(), false)).thenReturn(rootFolder);
 
     mockMvc
         .perform(post("/api/folders").param("parentPath", "docs").param("name", "newDir"))
@@ -120,6 +120,25 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.name").value("root"));
 
     verify(folderService).createFolder(tempDir.toString(), "docs", "newDir");
+    verify(folderService).getFolderTree(tempDir.toString(), false);
+  }
+
+  @Test
+  void createFolder_includeChildCountsTrue_passesFlagToTreeResponse() throws Exception {
+    when(folderService.createFolder(tempDir.toString(), "docs", "newDir"))
+        .thenReturn(tempDir.resolve("docs/newDir"));
+    when(folderService.getFolderTree(tempDir.toString(), true)).thenReturn(rootFolder);
+
+    mockMvc
+        .perform(
+            post("/api/folders")
+                .param("parentPath", "docs")
+                .param("name", "newDir")
+                .param("includeChildCounts", "true"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("root"));
+
+    verify(folderService).getFolderTree(tempDir.toString(), true);
   }
 
   @Test
@@ -131,7 +150,7 @@ class FolderControllerTest {
 
   @Test
   void deleteFolder_validRequest_returnsUpdatedTree() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString())).thenReturn(rootFolder);
+    when(folderService.getFolderTree(tempDir.toString(), false)).thenReturn(rootFolder);
 
     mockMvc
         .perform(delete("/api/folders").param("folderPath", "oldDir"))
@@ -139,13 +158,30 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.name").value("root"));
 
     verify(folderService).deleteFolder(tempDir.toString(), "oldDir");
+    verify(folderService).getFolderTree(tempDir.toString(), false);
+  }
+
+  @Test
+  void deleteFolder_includeChildCountsTrue_passesFlagToTreeResponse() throws Exception {
+    when(folderService.getFolderTree(tempDir.toString(), true)).thenReturn(rootFolder);
+
+    mockMvc
+        .perform(
+            delete("/api/folders")
+                .param("folderPath", "oldDir")
+                .param("includeChildCounts", "true"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("root"));
+
+    verify(folderService).deleteFolder(tempDir.toString(), "oldDir");
+    verify(folderService).getFolderTree(tempDir.toString(), true);
   }
 
   // ── PATCH /api/folders ───────────────────────────────────────────────────
 
   @Test
   void renameOrMoveFolder_validRequest_returnsUpdatedTree() throws Exception {
-    when(folderService.getFolderTree(tempDir.toString())).thenReturn(rootFolder);
+    when(folderService.getFolderTree(tempDir.toString(), false)).thenReturn(rootFolder);
 
     mockMvc
         .perform(patch("/api/folders").param("folderPath", "oldName").param("newPath", "newName"))
@@ -153,6 +189,24 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.name").value("root"));
 
     verify(folderService).renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    verify(folderService).getFolderTree(tempDir.toString(), false);
+  }
+
+  @Test
+  void renameOrMoveFolder_includeChildCountsTrue_passesFlagToTreeResponse() throws Exception {
+    when(folderService.getFolderTree(tempDir.toString(), true)).thenReturn(rootFolder);
+
+    mockMvc
+        .perform(
+            patch("/api/folders")
+                .param("folderPath", "oldName")
+                .param("newPath", "newName")
+                .param("includeChildCounts", "true"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("root"));
+
+    verify(folderService).renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    verify(folderService).getFolderTree(tempDir.toString(), true);
   }
 
   @Test
