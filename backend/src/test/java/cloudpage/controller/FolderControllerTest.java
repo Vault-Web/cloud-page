@@ -166,7 +166,10 @@ class FolderControllerTest {
     when(folderService.getFolderTree(tempDir.toString(), true)).thenReturn(rootFolder);
 
     mockMvc
-        .perform(delete("/api/folders").param("folderPath", "oldDir").param("includeChildCounts", "true"))
+        .perform(
+            delete("/api/folders")
+                .param("folderPath", "oldDir")
+                .param("includeChildCounts", "true"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("root"));
 
