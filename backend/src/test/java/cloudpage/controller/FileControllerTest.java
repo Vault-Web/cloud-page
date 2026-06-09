@@ -117,15 +117,16 @@ class FileControllerTest {
 
   @Test
   void downloadFile_existingFile_returnsResourceWithHeaders() throws Exception {
-    Path file = Files.writeString(tempDir.resolve("download.txt"), "data");
+    Path file = Files.writeString(tempDir.resolve("download.zip"), "data");
     FileResource fileResource =
         new FileResource(new UrlResource(file.toUri()), "\"4-123456\"", 123456L);
     when(fileService.loadAsResource(any(Path.class))).thenReturn(fileResource);
 
     mockMvc
-        .perform(get("/api/files/download").param("path", "download.txt"))
+        .perform(get("/api/files/download").param("path", "download.zip"))
         .andExpect(status().isOk())
-        .andExpect(header().string("Content-Disposition", "attachment; filename=\"download.txt\""))
+        .andExpect(header().string("Content-Disposition", "attachment; filename=\"download.zip\""))
+        .andExpect(header().exists("Content-Type"))
         .andExpect(header().exists("ETag"));
   }
 
