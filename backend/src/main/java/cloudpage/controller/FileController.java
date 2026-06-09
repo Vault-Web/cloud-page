@@ -67,10 +67,15 @@ public class FileController {
     folderService.validatePath(user.getRootFolderPath(), fullPath); // ensure security
 
     FileResource result = fileService.loadAsResource(fullPath);
+    String mimeType = Files.probeContentType(fullPath);
+    if (mimeType == null) {
+      mimeType = "application/octet-stream";
+    }
 
     return ResponseEntity.ok()
         .eTag(result.getETag())
         .lastModified(result.getLastModified())
+        .header(HttpHeaders.CONTENT_TYPE, mimeType)
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
             "attachment; filename=\"" + fullPath.getFileName() + "\"")
