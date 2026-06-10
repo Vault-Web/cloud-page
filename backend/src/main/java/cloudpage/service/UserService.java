@@ -9,12 +9,22 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+/** Service for resolving the currently authenticated user from the Spring Security context. */
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
   private final UserRepository userRepository;
 
+  /**
+   * Returns the user associated with the current security context.
+   *
+   * @return the authenticated {@link User}
+   * @throws UnauthorizedAccessException if the security context holds no authentication or it is
+   *     not authenticated
+   * @throws ResourceNotFoundException if the resolved username has no matching user record (for
+   *     example, an anonymous request whose principal does not map to a stored user)
+   */
   public User getCurrentUser() {
     Authentication auth = SecurityContextHolder.getContext().getAuthentication();
     if (auth == null || !auth.isAuthenticated()) {

@@ -15,9 +15,27 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Service for file-level operations within a user's storage area: uploading, deleting, renaming or
+ * moving, reading content, and loading files as downloadable resources. All paths are confined to
+ * the user's root directory, which acts as a security boundary against path traversal.
+ */
 @Service
 public class FileService {
 
+  /**
+   * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
+   * quota is supplied, the upload is rejected if it would push the user's total storage usage
+   * beyond the limit. An existing file with the same name is overwritten.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param relativeFolderPath the relative path of the destination folder
+   * @param file the uploaded file
+   * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
+   * @throws IOException if the folder cannot be created or the file cannot be written
+   * @throws InvalidPathException if the destination is outside the user's root directory
+   * @throws IllegalArgumentException if the upload would exceed the storage quota
+   */
   public void uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
@@ -45,12 +63,29 @@ public class FileService {
     Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
   }
 
+  /**
+   * Deletes a file if it exists. Does nothing if the file is already absent.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param relativeFilePath the relative path of the file to delete
+   * @throws IOException if the file cannot be deleted
+   * @throws InvalidPathException if the file is outside the user's root directory
+   */
   public void deleteFile(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
     validatePath(rootPath, file);
     Files.deleteIfExists(file);
   }
 
+  /**
+   * Renames or moves a file to a new location, overwriting any existing file at the destination.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param relativeFilePath the relative path of the file to move
+   * @param relativeNewPath the relative destination path
+   * @throws IOException if the file cannot be moved
+   * @throws InvalidPathException if the source or destination is outside the user's root directory
+   */
   public void renameOrMoveFile(String rootPath, String relativeFilePath, String relativeNewPath)
       throws IOException {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
@@ -60,6 +95,16 @@ public class FileService {
     Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
   }
 
+  /**
+   * Reads the entire textual content of a file.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param relativeFilePath the relative path of the file to read
+   * @return the file content as a string
+   * @throws IOException if the file cannot be read
+   * @throws InvalidPathException if the file is outside the user's root directory
+   * @throws ResourceNotFoundException if the file does not exist or is not a regular file
+   */
   public String readFileContent(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
     validatePath(rootPath, file);
@@ -71,6 +116,16 @@ public class FileService {
     return Files.readString(file);
   }
 
+  /**
+   * Validates that a path stays within the user's root directory, guarding against path traversal.
+   * Existing paths are resolved through symbolic links; for a non-existent path the existing parent
+   * directory is resolved instead so the intended location can still be checked.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param path the path to validate
+   * @throws IOException if the real path cannot be resolved
+   * @throws InvalidPathException if the path resolves outside the user's root directory
+   */
   private void validatePath(String rootPath, Path path) throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
     Path pathReal;
@@ -106,6 +161,16 @@ public class FileService {
     }
   }
 
+  /**
+   * Loads a file as a downloadable {@link Resource}, together with an ETag and last-modified
+   * timestamp derived from its size and modification time.
+   *
+   * @param fullPath the path of the file to load
+   * @return a {@link FileResource} wrapping the resource, its ETag, and last-modified time
+   * @throws IOException if the file attributes cannot be read
+   * @throws FileNotFoundException if the file does not exist, is not a regular file, or is not
+   *     readable
+   */
   public FileResource loadAsResource(Path fullPath) throws IOException {
     if (!Files.exists(fullPath) || !Files.isRegularFile(fullPath) || !Files.isReadable(fullPath)) {
       throw new FileNotFoundException("File not found: " + fullPath);
@@ -121,6 +186,15 @@ public class FileService {
     return new FileResource(resource, etag, lastModified);
   }
 
+  /**
+   * Calculates the total size of a directory by recursively summing the sizes of all regular files
+   * it contains. Files whose size cannot be read are skipped.
+   *
+   * @param path the directory to measure
+   * @return the total size in bytes of all regular files under {@code path}, or {@code 0} if the
+   *     path does not exist
+   * @throws IOException if the directory tree cannot be traversed
+   */
   private long calculateDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
 
