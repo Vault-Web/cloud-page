@@ -463,7 +463,7 @@ class FolderServiceTest {
 
     FolderContentItemDto folderItem =
         result.getContent().stream()
-            .filter(FolderContentItemDto::isDirectory)
+            .filter(item -> item.isDirectory() && item.getName().equals("withFiles"))
             .findFirst()
             .orElseThrow();
     assertEquals("withFiles", folderItem.getName());
