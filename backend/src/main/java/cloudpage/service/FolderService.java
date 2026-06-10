@@ -7,6 +7,7 @@ import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -204,6 +205,8 @@ public class FolderService {
                         if (!isDirectory) {
                           sizeValue = attrs.size();
                           mimeType = Files.probeContentType(path);
+                        } else {
+                          sizeValue = calculateDirectorySize(path);
                         }
                       } catch (IOException e) {
                         throw new FileAccessException(
@@ -240,6 +243,38 @@ public class FolderService {
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
+  }
+
+  /**
+   * Calculates the total size of a directory by recursively summing the sizes of all regular files
+   * it contains. Individual files whose size cannot be read are skipped so that a single
+   * inaccessible file does not fail the whole listing.
+   *
+   * <p>Symbolic links are not followed, so linked files are not counted and targets outside the
+   * directory tree are ignored.
+   *
+   * @param directory the directory whose cumulative size should be calculated
+   * @return the total size in bytes of all regular files contained in {@code directory}
+   * @throws FileAccessException if the directory tree cannot be traversed
+   */
+  private long calculateDirectorySize(Path directory) {
+    try (var stream = Files.walk(directory)) {
+      return stream
+          .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+          .mapToLong(
+              file -> {
+                try {
+                  return Files.readAttributes(
+                          file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
+                      .size();
+                } catch (IOException e) {
+                  return 0L;
+                }
+              })
+          .sum();
+    } catch (IOException e) {
+      throw new FileAccessException("Failed to calculate directory size: " + directory, e);
+    }
   }
 
   private void applySorting(List<FolderContentItemDto> items, String sort) {

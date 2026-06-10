@@ -449,4 +449,25 @@ class FolderServiceTest {
     assertTrue(item.isDirectory());
     assertNotNull(item.getPath());
   }
+
+  @Test
+  void getFolderContentPage_folderWithContents_sizeIsRecursiveSum() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("withFiles"));
+    Files.writeString(folder.resolve("a.txt"), "12345"); // 5 bytes
+    Files.writeString(folder.resolve("b.txt"), "678"); // 3 bytes
+    Path nested = Files.createDirectory(folder.resolve("nested"));
+    Files.writeString(nested.resolve("c.txt"), "90"); // 2 bytes, in a subfolder
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    FolderContentItemDto folderItem =
+        result.getContent().stream()
+            .filter(item -> item.isDirectory() && item.getName().equals("withFiles"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("withFiles", folderItem.getName());
+    // 5 + 3 + 2 -> the folder size includes files in nested subfolders
+    assertEquals(10, folderItem.getSize());
+  }
 }
