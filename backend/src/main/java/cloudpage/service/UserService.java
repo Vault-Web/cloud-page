@@ -20,8 +20,10 @@ public class UserService {
    * Returns the user associated with the current security context.
    *
    * @return the authenticated {@link User}
-   * @throws UnauthorizedAccessException if no authenticated user is present in the security context
-   * @throws ResourceNotFoundException if the authenticated username has no matching user record
+   * @throws UnauthorizedAccessException if the security context holds no authentication or it is
+   *     not authenticated
+   * @throws ResourceNotFoundException if the resolved username has no matching user record (for
+   *     example, an anonymous request whose principal does not map to a stored user)
    */
   public User getCurrentUser() {
     Authentication auth = SecurityContextHolder.getContext().getAuthentication();

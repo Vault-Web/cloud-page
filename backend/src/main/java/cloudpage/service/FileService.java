@@ -165,7 +165,7 @@ public class FileService {
    * Loads a file as a downloadable {@link Resource}, together with an ETag and last-modified
    * timestamp derived from its size and modification time.
    *
-   * @param fullPath the absolute path of the file to load
+   * @param fullPath the path of the file to load
    * @return a {@link FileResource} wrapping the resource, its ETag, and last-modified time
    * @throws IOException if the file attributes cannot be read
    * @throws FileNotFoundException if the file does not exist, is not a regular file, or is not
