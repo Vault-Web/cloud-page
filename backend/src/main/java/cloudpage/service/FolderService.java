@@ -204,6 +204,8 @@ public class FolderService {
                         if (!isDirectory) {
                           sizeValue = attrs.size();
                           mimeType = Files.probeContentType(path);
+                        } else {
+                          sizeValue = calculateDirectorySize(path);
                         }
                       } catch (IOException e) {
                         throw new FileAccessException(
@@ -240,6 +242,37 @@ public class FolderService {
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
+  }
+
+  /**
+   * Calculates the total size of a directory by recursively summing the sizes of all regular files
+   * it contains. Individual files whose size cannot be read are skipped so that a single
+   * inaccessible file does not fail the whole listing.
+   *
+   * @param directory the directory whose cumulative size should be calculated
+   * @return the total size in bytes of all regular files contained in {@code directory}
+   * @throws FileAccessException if the directory tree cannot be traversed
+   */
+  private long calculateDirectorySize(Path directory) {
+    try (var stream = Files.walk(directory)) {
+      return stream
+          .filter(Files::isRegularFile)
+          .mapToLong(
+              file -> {
+                try {
+                  return Files.size(file);
+                } catch (IOException e) {
+                  return 0L;
+                }
+              })
+          .sum();
+    } catch (IOException e) {
+      throw new FileAccessException(
+          "Failed to calculate directory size: "
+              + directory
+              + " with exception: "
+              + e.getMessage());
+    }
   }
 
   private void applySorting(List<FolderContentItemDto> items, String sort) {
