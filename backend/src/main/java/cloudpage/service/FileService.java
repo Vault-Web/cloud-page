@@ -33,7 +33,8 @@ public class FileService {
    * @param file the uploaded file
    * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
    * @throws IOException if the folder cannot be created or the file cannot be written
-   * @throws InvalidPathException if the destination is outside the user's root directory
+   * @throws InvalidPathException if the file name is missing or the destination resolves outside
+   *     the user's root directory
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
   public void uploadFile(
@@ -59,7 +60,20 @@ public class FileService {
       }
     }
 
-    Path target = folder.resolve(file.getOriginalFilename());
+    String originalFilename = file.getOriginalFilename();
+    if (originalFilename == null || originalFilename.isBlank()) {
+      throw new InvalidPathException("Uploaded file must have a name");
+    }
+
+    // Strip any directory components from the user-supplied name so a crafted filename
+    // (e.g. "../../x" or an absolute path) cannot write outside the user's root directory.
+    Path fileName = Paths.get(originalFilename).getFileName();
+    if (fileName == null) {
+      throw new InvalidPathException("Invalid file name: " + originalFilename);
+    }
+
+    Path target = folder.resolve(fileName).normalize();
+    validatePath(rootPath, target);
     Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
   }
 
