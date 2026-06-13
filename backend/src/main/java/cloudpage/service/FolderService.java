@@ -53,9 +53,11 @@ public class FolderService {
     // Locale.ROOT prevents using the system's local language for case conversion
     String lowerQuery = query.toLowerCase(Locale.ROOT);
 
+    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
       return stream
           .filter(p -> !p.equals(folder))
+          .filter(p -> !p.startsWith(trashDir))
           .map(p -> createSearchResult(p, lowerQuery))
           .filter(r -> r.getScore() >= minScore)
           .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
@@ -183,8 +185,10 @@ public class FolderService {
     List<FolderContentItemDto> items = new ArrayList<>();
 
     try (var stream = Files.list(folder)) {
+      Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
       items =
           stream
+              .filter(path -> !path.normalize().equals(trashDir))
               .map(
                   path -> {
                     try {
@@ -315,27 +319,31 @@ public class FolderService {
 
     List<FolderListItemDto> subfolders = new ArrayList<>();
     List<FileDto> files = new ArrayList<>();
+    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
     try (var stream = Files.list(path)) {
-      stream.forEach(
-          childPath -> {
-            try {
-              // Resolve and validate once per child to avoid repeated toRealPath() calls.
-              Path childPathReal = resolvePathWithinRoot(rootReal, childPath);
+      stream
+          .filter(childPath -> !childPath.normalize().equals(trashDir))
+          .forEach(
+              childPath -> {
+                try {
+                  // Resolve and validate once per child to avoid repeated toRealPath() calls.
+                  Path childPathReal = resolvePathWithinRoot(rootReal, childPath);
 
-              if (Files.isDirectory(childPath)) {
-                subfolders.add(
-                    toFolderListItemDto(rootReal, childPath, childPathReal, includeChildCounts));
-              } else if (Files.isRegularFile(childPath)) {
-                files.add(toFileDto(rootReal, childPath, childPathReal));
-              }
-            } catch (IOException e) {
-              throw new InvalidPathException(
-                  "Invalid path detected while reading folder: "
-                      + childPath
-                      + " - "
-                      + e.getMessage());
-            }
-          });
+                  if (Files.isDirectory(childPath)) {
+                    subfolders.add(
+                        toFolderListItemDto(
+                            rootReal, childPath, childPathReal, includeChildCounts));
+                  } else if (Files.isRegularFile(childPath)) {
+                    files.add(toFileDto(rootReal, childPath, childPathReal));
+                  }
+                } catch (IOException e) {
+                  throw new InvalidPathException(
+                      "Invalid path detected while reading folder: "
+                          + childPath
+                          + " - "
+                          + e.getMessage());
+                }
+              });
     }
 
     // Calculate relative path for the current folder
