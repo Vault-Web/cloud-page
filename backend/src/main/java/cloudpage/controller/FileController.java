@@ -4,6 +4,7 @@ import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.service.FileService;
 import cloudpage.service.FolderService;
+import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,6 +26,7 @@ public class FileController {
   private final FileService fileService;
   private final UserService userService;
   private final FolderService folderService;
+  private final TrashService trashService;
 
   @PostMapping("/upload")
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
@@ -50,7 +52,7 @@ public class FileController {
   @DeleteMapping
   public void deleteFile(@RequestParam String filePath) throws IOException {
     var user = userService.getCurrentUser();
-    fileService.deleteFile(user.getRootFolderPath(), filePath);
+    trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
   }
 
   @PatchMapping("/move")
