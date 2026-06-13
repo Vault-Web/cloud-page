@@ -12,6 +12,7 @@ import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.FileService;
 import cloudpage.service.FolderService;
+import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +36,7 @@ class FileControllerTest {
   @MockitoBean private FileService fileService;
   @MockitoBean private UserService userService;
   @MockitoBean private FolderService folderService;
+  @MockitoBean private TrashService trashService;
   @MockitoBean private JwtAuthFilter jwtAuthFilter;
   @MockitoBean private JwtUtil jwtUtil;
 
@@ -98,7 +100,8 @@ class FileControllerTest {
   void deleteFile_validRequest_returns200() throws Exception {
     mockMvc.perform(delete("/api/files").param("filePath", "old.txt")).andExpect(status().isOk());
 
-    verify(fileService).deleteFile(tempDir.toString(), "old.txt");
+    // delete now soft-deletes: the file is moved to the user's trash
+    verify(trashService).moveToTrash(tempDir.toString(), "user-1", "old.txt");
   }
 
   // ── PATCH /api/files/move ────────────────────────────────────────────────
