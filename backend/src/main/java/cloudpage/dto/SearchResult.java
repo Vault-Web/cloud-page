@@ -1,4 +1,4 @@
-package cloudpage.dto;
+
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -13,5 +13,4 @@ public class SearchResult {
   private String type;
   private Long size;
   private String mimeType;
-  private int score;
-}
+  private int score
