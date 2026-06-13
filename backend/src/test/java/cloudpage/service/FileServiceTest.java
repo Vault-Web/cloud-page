@@ -74,6 +74,42 @@ class FileServiceTest {
         () -> fileService.uploadFile(tempDir.toString(), "../../etc", file, null));
   }
 
+  @Test
+  void uploadFile_filenameWithTraversal_staysWithinRoot() throws IOException {
+    Path root = Files.createDirectory(tempDir.resolve("root"));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "../../evil.txt", "text/plain", "hack".getBytes());
+
+    fileService.uploadFile(root.toString(), "docs", file, null);
+
+    // The crafted name is reduced to its final component and written inside the folder...
+    assertTrue(Files.exists(root.resolve("docs/evil.txt")));
+    // ...and nothing is written outside the user's root.
+    assertFalse(Files.exists(tempDir.resolve("evil.txt")));
+  }
+
+  @Test
+  void uploadFile_absolutePathFilename_staysWithinRoot() throws IOException {
+    Path root = Files.createDirectory(tempDir.resolve("root"));
+    Path outside = tempDir.resolve("outside.txt");
+    MockMultipartFile file =
+        new MockMultipartFile("file", outside.toString(), "text/plain", "hack".getBytes());
+
+    fileService.uploadFile(root.toString(), "docs", file, null);
+
+    assertFalse(Files.exists(outside));
+    assertTrue(Files.exists(root.resolve("docs/outside.txt")));
+  }
+
+  @Test
+  void uploadFile_blankFilename_throwsInvalidPathException() {
+    MockMultipartFile file = new MockMultipartFile("file", "", "text/plain", "data".getBytes());
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "docs", file, null));
+  }
+
   // ── deleteFile ───────────────────────────────────────────────────────────
 
   @Test
