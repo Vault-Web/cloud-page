@@ -9,6 +9,7 @@ import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -292,6 +293,48 @@ class FolderServiceTest {
     assertEquals(1, result.getTotalPages());
     assertEquals(0, result.getPageNumber());
     assertEquals(2, result.getContent().size());
+  }
+
+  @Test
+  void getFolderContentPage_sortByNameDescending_reversesOrder() throws IOException {
+    Files.writeString(tempDir.resolve("a.txt"), "x");
+    Files.writeString(tempDir.resolve("b.txt"), "x");
+    Files.writeString(tempDir.resolve("c.txt"), "x");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "name,desc");
+
+    assertEquals(
+        List.of("c.txt", "b.txt", "a.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
+  }
+
+  @Test
+  void getFolderContentPage_sortBySizeAscending_ordersBySize() throws IOException {
+    Files.writeString(tempDir.resolve("small.txt"), "x"); // 1 byte
+    Files.writeString(tempDir.resolve("large.txt"), "xxxxx"); // 5 bytes
+    Files.writeString(tempDir.resolve("medium.txt"), "xxx"); // 3 bytes
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "size");
+
+    assertEquals(
+        List.of("small.txt", "medium.txt", "large.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
+  }
+
+  @Test
+  void getFolderContentPage_sortBySizeDescending_ordersBySizeReversed() throws IOException {
+    Files.writeString(tempDir.resolve("small.txt"), "x");
+    Files.writeString(tempDir.resolve("large.txt"), "xxxxx");
+    Files.writeString(tempDir.resolve("medium.txt"), "xxx");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "size,desc");
+
+    assertEquals(
+        List.of("large.txt", "medium.txt", "small.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
   }
 
   @Test

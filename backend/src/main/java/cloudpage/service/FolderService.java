@@ -297,6 +297,12 @@ public class FolderService {
 
     Comparator<FolderContentItemDto> comparator;
     switch (sortField) {
+      case "size":
+        comparator = Comparator.comparingLong(FolderContentItemDto::getSize);
+        break;
+      case "lastModifiedAt":
+        comparator = Comparator.comparingLong(FolderContentItemDto::getLastModifiedAt);
+        break;
       case "name":
       default:
         comparator =
