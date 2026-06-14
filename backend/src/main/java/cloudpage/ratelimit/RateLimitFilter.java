@@ -58,15 +58,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     String clientKey = clientKey(request);
     RateLimitDecision decision = rateLimitService.tryAcquire(category, clientKey);
     if (decision.allowed()) {
-      response.setHeader(REMAINING_HEADER, Long.toString(decision.remainingTokens()));
+      if (decision.remainingTokens() >= 0) {
+        response.setHeader(REMAINING_HEADER, Long.toString(decision.remainingTokens()));
+      }
       filterChain.doFilter(request, response);
       return;
     }
 
-    log.warn(
-        "Rate limit exceeded: category={}, client={}, retryAfter={}s",
+    log.debug(
+        "Rate limit exceeded for category {} (retry after {}s)",
         category,
-        clientKey,
         decision.retryAfterSeconds());
     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
     response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(decision.retryAfterSeconds()));
@@ -94,7 +95,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             || "/api/files/content".equals(path))) {
       return RateLimitCategory.DOWNLOAD;
     }
-    if ("GET".equals(method) && path.startsWith("/api/folders")) {
+    if ("GET".equals(method) && (path.equals("/api/folders") || path.startsWith("/api/folders/"))) {
       return RateLimitCategory.LISTING;
     }
     return null;
@@ -109,9 +110,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         && !"anonymousUser".equals(authentication.getName())) {
       return "user:" + authentication.getName();
     }
-    String forwarded = request.getHeader("X-Forwarded-For");
-    String ip =
-        StringUtils.hasText(forwarded) ? forwarded.split(",")[0].trim() : request.getRemoteAddr();
-    return "ip:" + ip;
+    // Use the transport-level remote address only. X-Forwarded-For is client-controlled and could
+    // be
+    // spoofed to bypass per-IP limits; behind a trusted proxy, set server.forward-headers-strategy
+    // so
+    // getRemoteAddr() already resolves the real client IP.
+    return "ip:" + request.getRemoteAddr();
   }
 }

@@ -18,4 +18,9 @@ public record RateLimitDecision(boolean allowed, long remainingTokens, long retr
   static RateLimitDecision denied(long retryAfterSeconds) {
     return new RateLimitDecision(false, 0L, retryAfterSeconds);
   }
+
+  /** Allowed with no applicable limit; {@code remainingTokens} is negative so no header is set. */
+  static RateLimitDecision unlimited() {
+    return new RateLimitDecision(true, -1L, 0L);
+  }
 }

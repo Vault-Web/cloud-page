@@ -38,33 +38,45 @@ public class RateLimitService {
 
   /**
    * Attempts to admit one request in {@code category} for the given {@code clientKey}. The
-   * instance-wide budget is checked first; the per-client budget is only charged when the request
-   * clears it.
+   * per-client budget is evaluated first, so a client that is already over its own limit cannot
+   * drain the shared global budget on behalf of everyone else; the global budget is only charged
+   * once the per-client tier admits the request.
    */
   public RateLimitDecision tryAcquire(RateLimitCategory category, String clientKey) {
-    RateLimitProperties.Policy globalPolicy = properties.getGlobal().forCategory(category);
-    if (globalPolicy.isEnabled()) {
-      TokenBucket globalBucket =
-          globalBuckets.computeIfAbsent(category, c -> newBucket(globalPolicy));
-      RateLimitDecision globalDecision = globalBucket.tryConsume();
+    RateLimitProperties.Policy clientPolicy = properties.getPerClient().forCategory(category);
+    if (clientPolicy.isEnabled()) {
+      TokenBucket bucket =
+          perClientBuckets.computeIfAbsent(
+              category.name() + '|' + clientKey, key -> newBucket(clientPolicy));
+      RateLimitDecision clientDecision = bucket.tryConsume();
+      if (!clientDecision.allowed()) {
+        recordThrottle(category);
+        return clientDecision;
+      }
+      RateLimitDecision globalDecision = tryConsumeGlobal(category);
       if (!globalDecision.allowed()) {
         recordThrottle(category);
         return globalDecision;
       }
+      return clientDecision;
     }
 
-    RateLimitProperties.Policy clientPolicy = properties.getPerClient().forCategory(category);
-    if (!clientPolicy.isEnabled()) {
-      return RateLimitDecision.allowed(Long.MAX_VALUE);
-    }
-    TokenBucket bucket =
-        perClientBuckets.computeIfAbsent(
-            category.name() + '|' + clientKey, key -> newBucket(clientPolicy));
-    RateLimitDecision decision = bucket.tryConsume();
-    if (!decision.allowed()) {
+    // Per-client limiting disabled for this category: only the global tier (if any) applies.
+    RateLimitDecision globalDecision = tryConsumeGlobal(category);
+    if (!globalDecision.allowed()) {
       recordThrottle(category);
     }
-    return decision;
+    return globalDecision;
+  }
+
+  private RateLimitDecision tryConsumeGlobal(RateLimitCategory category) {
+    RateLimitProperties.Policy globalPolicy = properties.getGlobal().forCategory(category);
+    if (!globalPolicy.isEnabled()) {
+      return RateLimitDecision.unlimited();
+    }
+    TokenBucket globalBucket =
+        globalBuckets.computeIfAbsent(category, c -> newBucket(globalPolicy));
+    return globalBucket.tryConsume();
   }
 
   private TokenBucket newBucket(RateLimitProperties.Policy policy) {

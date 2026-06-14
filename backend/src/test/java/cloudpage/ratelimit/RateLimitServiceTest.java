@@ -100,4 +100,25 @@ class RateLimitServiceTest {
     // the instance-wide budget of 2 is now exhausted regardless of which client asks
     assertFalse(service.tryAcquire(RateLimitCategory.UPLOAD, "user:carol").allowed());
   }
+
+  @Test
+  void perClientDenialDoesNotDrainGlobalBudget() {
+    RateLimitProperties properties = new RateLimitProperties();
+    // alice can make a single per-client request; the global budget has room for three.
+    properties.getPerClient().setUpload(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    properties.getGlobal().setUpload(new RateLimitProperties.Policy(3, Duration.ofMinutes(1)));
+    RateLimitService service = serviceWith(properties);
+
+    // alice's first request is admitted (and charges one global token)
+    assertTrue(service.tryAcquire(RateLimitCategory.UPLOAD, "user:alice").allowed());
+    // alice is now per-client throttled; these denials must not consume global tokens
+    assertFalse(service.tryAcquire(RateLimitCategory.UPLOAD, "user:alice").allowed());
+    assertFalse(service.tryAcquire(RateLimitCategory.UPLOAD, "user:alice").allowed());
+
+    // the global budget still has two tokens left for other clients
+    assertTrue(service.tryAcquire(RateLimitCategory.UPLOAD, "user:bob").allowed());
+    assertTrue(service.tryAcquire(RateLimitCategory.UPLOAD, "user:carol").allowed());
+    // now the instance-wide budget of three is exhausted
+    assertFalse(service.tryAcquire(RateLimitCategory.UPLOAD, "user:dave").allowed());
+  }
 }
