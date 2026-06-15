@@ -40,6 +40,15 @@ final class TokenBucket {
     return RateLimitDecision.denied(retryAfterSeconds);
   }
 
+  /**
+   * Whether the bucket has refilled back to full capacity — i.e. the client has been idle for at
+   * least one refill period. Such a bucket carries no state worth keeping, so it is safe to evict.
+   */
+  synchronized boolean isReplenished() {
+    refill();
+    return availableTokens >= capacity;
+  }
+
   private void refill() {
     long now = nanoClock.getAsLong();
     long elapsed = now - lastRefillNanos;

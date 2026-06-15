@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
@@ -90,5 +91,20 @@ public class RateLimitService {
             registry
                 .counter("cloudpage.ratelimit.throttled", "category", category.name())
                 .increment());
+  }
+
+  /**
+   * Periodically drops per-client buckets that have refilled back to full. An idle client's bucket
+   * carries no state worth keeping — re-creating it on the next request yields an identical full
+   * bucket — so evicting it bounds the cache to currently-active clients instead of letting it grow
+   * for every distinct client (or IP) ever seen.
+   */
+  @Scheduled(fixedDelayString = "${cloudpage.rate-limit.cleanup-interval-ms:300000}")
+  void evictReplenishedBuckets() {
+    perClientBuckets.values().removeIf(TokenBucket::isReplenished);
+  }
+
+  int trackedClientBucketCount() {
+    return perClientBuckets.size();
   }
 }

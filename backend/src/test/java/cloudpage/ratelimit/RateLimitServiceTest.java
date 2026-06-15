@@ -1,5 +1,6 @@
 package cloudpage.ratelimit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -120,5 +121,20 @@ class RateLimitServiceTest {
     assertTrue(service.tryAcquire(RateLimitCategory.UPLOAD, "user:carol").allowed());
     // now the instance-wide budget of three is exhausted
     assertFalse(service.tryAcquire(RateLimitCategory.UPLOAD, "user:dave").allowed());
+  }
+
+  @Test
+  void evictionDropsReplenishedButKeepsActiveBuckets() {
+    RateLimitService service = serviceWith(perClientUpload(2, Duration.ofMinutes(1)));
+
+    // alice consumes one token, so her bucket is no longer at full capacity
+    service.tryAcquire(RateLimitCategory.UPLOAD, "user:alice");
+    service.evictReplenishedBuckets();
+    assertEquals(1, service.trackedClientBucketCount());
+
+    // after a full refill period the bucket is replenished and can be safely dropped
+    clock.addAndGet(Duration.ofMinutes(2).toNanos());
+    service.evictReplenishedBuckets();
+    assertEquals(0, service.trackedClientBucketCount());
   }
 }
