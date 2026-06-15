@@ -314,6 +314,11 @@ public class FolderService {
       comparator = comparator.reversed();
     }
 
+    // Break ties by name so equal primary keys (folders all report size 0, and timestamps can
+    // collide) keep a deterministic order. Names are unique within a folder, so this yields a
+    // total ordering and stops items from being dropped or duplicated across paged requests.
+    comparator = comparator.thenComparing(FolderContentItemDto::getName);
+
     items.sort(comparator);
   }
 

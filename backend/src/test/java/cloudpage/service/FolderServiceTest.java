@@ -9,6 +9,7 @@ import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -334,6 +335,58 @@ class FolderServiceTest {
 
     assertEquals(
         List.of("large.txt", "medium.txt", "small.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
+  }
+
+  @Test
+  void getFolderContentPage_sortByLastModifiedAscending_ordersByModifiedTime() throws IOException {
+    Path oldest = Files.writeString(tempDir.resolve("oldest.txt"), "x");
+    Path middle = Files.writeString(tempDir.resolve("middle.txt"), "x");
+    Path newest = Files.writeString(tempDir.resolve("newest.txt"), "x");
+    Files.setLastModifiedTime(oldest, FileTime.fromMillis(1_000L));
+    Files.setLastModifiedTime(middle, FileTime.fromMillis(2_000L));
+    Files.setLastModifiedTime(newest, FileTime.fromMillis(3_000L));
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "lastModifiedAt,asc");
+
+    assertEquals(
+        List.of("oldest.txt", "middle.txt", "newest.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
+  }
+
+  @Test
+  void getFolderContentPage_sortByLastModifiedDescending_ordersByModifiedTimeReversed()
+      throws IOException {
+    Path oldest = Files.writeString(tempDir.resolve("oldest.txt"), "x");
+    Path middle = Files.writeString(tempDir.resolve("middle.txt"), "x");
+    Path newest = Files.writeString(tempDir.resolve("newest.txt"), "x");
+    Files.setLastModifiedTime(oldest, FileTime.fromMillis(1_000L));
+    Files.setLastModifiedTime(middle, FileTime.fromMillis(2_000L));
+    Files.setLastModifiedTime(newest, FileTime.fromMillis(3_000L));
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "lastModifiedAt,desc");
+
+    assertEquals(
+        List.of("newest.txt", "middle.txt", "oldest.txt"),
+        result.getContent().stream().map(FolderContentItemDto::getName).toList());
+  }
+
+  @Test
+  void getFolderContentPage_sortBySizeWithTies_breaksTiesByNameForStablePaging()
+      throws IOException {
+    // Every folder reports size 0, so a size sort alone is ambiguous; the name tie-breaker must
+    // give a deterministic order so pagination never drops or duplicates equal-keyed entries.
+    Files.createDirectory(tempDir.resolve("charlie"));
+    Files.createDirectory(tempDir.resolve("alpha"));
+    Files.createDirectory(tempDir.resolve("bravo"));
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, "size");
+
+    assertEquals(
+        List.of("alpha", "bravo", "charlie"),
         result.getContent().stream().map(FolderContentItemDto::getName).toList());
   }
 
