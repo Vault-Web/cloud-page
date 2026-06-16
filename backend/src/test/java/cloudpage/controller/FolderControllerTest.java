@@ -10,6 +10,7 @@ import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.model.User;
+import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.FolderService;
@@ -39,6 +40,7 @@ class FolderControllerTest {
   @MockitoBean private UserService userService;
   @MockitoBean private JwtAuthFilter jwtAuthFilter;
   @MockitoBean private JwtUtil jwtUtil;
+  @MockitoBean private RateLimitFilter rateLimitFilter;
 
   @TempDir Path tempDir;
 

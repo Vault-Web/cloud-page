@@ -2,7 +2,10 @@ package cloudpage.security;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
+import cloudpage.ratelimit.RateLimitFilter;
+import cloudpage.ratelimit.RateLimitProperties;
 import lombok.AllArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,10 +16,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@EnableConfigurationProperties(RateLimitProperties.class)
 @AllArgsConstructor
 public class SecurityConfig {
 
   private final JwtAuthFilter jwtAuthFilter;
+  private final RateLimitFilter rateLimitFilter;
 
   /**
    * Configures the security filter chain for HTTP requests. This method sets up the security
@@ -55,7 +60,8 @@ public class SecurityConfig {
                     .permitAll()
                     .anyRequest()
                     .authenticated())
-        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+        .addFilterAfter(rateLimitFilter, JwtAuthFilter.class);
 
     return http.build();
   }

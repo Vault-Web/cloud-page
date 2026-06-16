@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import cloudpage.dto.TrashEntryDto;
 import cloudpage.model.User;
+import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.TrashService;
@@ -34,6 +35,7 @@ class TrashControllerTest {
   @MockitoBean private UserService userService;
   @MockitoBean private JwtAuthFilter jwtAuthFilter;
   @MockitoBean private JwtUtil jwtUtil;
+  @MockitoBean private RateLimitFilter rateLimitFilter;
 
   private User testUser;
 

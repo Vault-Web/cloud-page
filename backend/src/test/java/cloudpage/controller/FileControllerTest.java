@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.model.User;
+import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.FileService;
@@ -39,6 +40,7 @@ class FileControllerTest {
   @MockitoBean private TrashService trashService;
   @MockitoBean private JwtAuthFilter jwtAuthFilter;
   @MockitoBean private JwtUtil jwtUtil;
+  @MockitoBean private RateLimitFilter rateLimitFilter;
 
   @TempDir Path tempDir;
 
