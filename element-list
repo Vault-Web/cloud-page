@@ -4,6 +4,7 @@ cloudpage.controller
 cloudpage.dto
 cloudpage.exceptions
 cloudpage.model
+cloudpage.ratelimit
 cloudpage.repository
 cloudpage.security
 cloudpage.service
