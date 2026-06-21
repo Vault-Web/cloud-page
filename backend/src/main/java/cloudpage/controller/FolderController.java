@@ -3,6 +3,7 @@ package cloudpage.controller;
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
+import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
@@ -92,7 +93,8 @@ public class FolderController {
       @RequestParam String folderPath,
       @RequestParam String query,
       @RequestParam(defaultValue = "20") int maxResults,
-      @RequestParam(defaultValue = "60") int minScore)
+      @RequestParam(defaultValue = "60") int minScore,
+      SearchFilter filter)
       throws IOException {
     if (query == null || query.isBlank()) {
       return ResponseEntity.badRequest().build();
@@ -104,6 +106,6 @@ public class FolderController {
     var user = userService.getCurrentUser();
     return ResponseEntity.ok(
         folderService.searchInFolder(
-            user.getRootFolderPath(), folderPath, query, maxResults, validatedMinScore));
+            user.getRootFolderPath(), folderPath, query, maxResults, validatedMinScore, filter));
   }
 }

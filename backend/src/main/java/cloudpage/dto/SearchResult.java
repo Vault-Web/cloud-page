@@ -13,5 +13,6 @@ public class SearchResult {
   private String type;
   private Long size;
   private String mimeType;
+  private Long lastModifiedAt;
   private int score;
 }

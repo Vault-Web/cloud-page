@@ -12,6 +12,27 @@ This service is designed to integrate seamlessly with **Vault Web**, sharing its
 - 🔹 **File Explorer-like API** for user files  
 - 🔹 **CRUD operations** on files and folders  
 - 🔹 **Secure access via JWT tokens** using Vault Web's master key  
+- 🔹 **Fuzzy file search** with metadata filters (type, MIME, size, modified date) and sort controls  
+
+---
+
+## Search
+
+`GET /api/folders/search` performs a fuzzy (Jaro-Winkler) name match and accepts optional metadata
+filters and sort controls:
+
+```
+GET /api/folders/search?folderPath=/&query=report&type=file&minSize=1024&sortBy=size
+```
+
+| Param | Description |
+|-------|-------------|
+| `type` | `file` or `folder` |
+| `mimeType` | MIME-type prefix, e.g. `image` matches `image/png` |
+| `minSize` / `maxSize` | size bounds in bytes |
+| `modifiedAfter` / `modifiedBefore` | last-modified bounds (epoch millis) |
+| `sortBy` | `relevance` (default), `name`, `size`, or `lastModified` |
+| `ascending` | sort direction; defaults to `false` (best / largest / newest first) |
 
 ---
 
