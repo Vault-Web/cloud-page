@@ -6,7 +6,7 @@ import lombok.Setter;
 /**
  * Optional metadata filters and sort controls for the folder search endpoint. All fields are
  * optional; an unset field is not applied. Bound from the query string of {@code GET
- * /folders/search}.
+ * /api/folders/search}.
  */
 @Getter
 @Setter

@@ -81,7 +81,9 @@ public class FolderService {
 
   /** Returns whether a search result satisfies every set metadata filter. */
   private boolean matchesFilter(SearchResult result, SearchFilter filter) {
-    if (filter.getType() != null && !filter.getType().equalsIgnoreCase(result.getType())) {
+    if (filter.getType() != null
+        && !filter.getType().isBlank()
+        && !filter.getType().equalsIgnoreCase(result.getType())) {
       return false;
     }
     if (filter.getMimeType() != null && !filter.getMimeType().isBlank()) {
