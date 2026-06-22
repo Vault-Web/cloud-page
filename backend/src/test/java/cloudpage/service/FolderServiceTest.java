@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
+import cloudpage.dto.SearchFilter;
+import cloudpage.dto.SearchResult;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -565,5 +567,167 @@ class FolderServiceTest {
     assertEquals("withFiles", folderItem.getName());
     // 5 + 3 + 2 -> the folder size includes files in nested subfolders
     assertEquals(10, folderItem.getSize());
+  }
+
+  // ── searchInFolder: metadata filters & sorting ───────────────────────────
+
+  @Test
+  void searchInFolder_filterByTypeFile_excludesFolders() throws IOException {
+    Files.writeString(tempDir.resolve("report-file.txt"), "x");
+    Files.createDirectory(tempDir.resolve("report-folder"));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setType("file");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertFalse(results.isEmpty());
+    assertTrue(results.stream().allMatch(r -> "file".equals(r.getType())));
+    assertTrue(results.stream().anyMatch(r -> r.getName().equals("report-file.txt")));
+  }
+
+  @Test
+  void searchInFolder_filterBySize_returnsOnlyWithinRange() throws IOException {
+    Files.writeString(tempDir.resolve("report-small.txt"), "ab");
+    Files.writeString(tempDir.resolve("report-large.txt"), "x".repeat(500));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setMinSize(100L);
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals(1, results.size());
+    assertEquals("report-large.txt", results.get(0).getName());
+  }
+
+  @Test
+  void searchInFolder_filterByModifiedAfter_excludesOlder() throws IOException {
+    Path older = tempDir.resolve("report-old.txt");
+    Path newer = tempDir.resolve("report-new.txt");
+    Files.writeString(older, "x");
+    Files.writeString(newer, "x");
+    Files.setLastModifiedTime(older, FileTime.fromMillis(1_000_000L));
+    Files.setLastModifiedTime(newer, FileTime.fromMillis(2_000_000_000_000L));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setModifiedAfter(1_500_000_000_000L);
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals(1, results.size());
+    assertEquals("report-new.txt", results.get(0).getName());
+  }
+
+  @Test
+  void searchInFolder_sortBySize_largestFirstByDefault() throws IOException {
+    Files.writeString(tempDir.resolve("report-small.txt"), "ab");
+    Files.writeString(tempDir.resolve("report-large.txt"), "x".repeat(500));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setSortBy("size");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals("report-large.txt", results.get(0).getName());
+    assertEquals("report-small.txt", results.get(1).getName());
+  }
+
+  @Test
+  void searchInFolder_sortByNameAscending_ordersAToZ() throws IOException {
+    Files.writeString(tempDir.resolve("report-b.txt"), "x");
+    Files.writeString(tempDir.resolve("report-a.txt"), "x");
+
+    SearchFilter filter = new SearchFilter();
+    filter.setSortBy("name");
+    filter.setAscending(true);
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals("report-a.txt", results.get(0).getName());
+    assertEquals("report-b.txt", results.get(1).getName());
+  }
+
+  @Test
+  void searchInFolder_withoutFilter_returnsAllMatches() throws IOException {
+    Files.writeString(tempDir.resolve("report-a.txt"), "x");
+    Files.writeString(tempDir.resolve("report-b.txt"), "x");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    assertEquals(2, results.size());
+  }
+
+  @Test
+  void searchInFolder_sortByLastModified_newestFirstByDefault() throws IOException {
+    Path older = tempDir.resolve("report-old.txt");
+    Path newer = tempDir.resolve("report-new.txt");
+    Files.writeString(older, "x");
+    Files.writeString(newer, "x");
+    Files.setLastModifiedTime(older, FileTime.fromMillis(1_000_000L));
+    Files.setLastModifiedTime(newer, FileTime.fromMillis(2_000_000_000_000L));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setSortBy("lastModified");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals("report-new.txt", results.get(0).getName());
+    assertEquals("report-old.txt", results.get(1).getName());
+  }
+
+  @Test
+  void searchInFolder_filterByModifiedBefore_excludesNewer() throws IOException {
+    Path older = tempDir.resolve("report-old.txt");
+    Path newer = tempDir.resolve("report-new.txt");
+    Files.writeString(older, "x");
+    Files.writeString(newer, "x");
+    Files.setLastModifiedTime(older, FileTime.fromMillis(1_000_000L));
+    Files.setLastModifiedTime(newer, FileTime.fromMillis(2_000_000_000_000L));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setModifiedBefore(1_500_000_000_000L);
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals(1, results.size());
+    assertEquals("report-old.txt", results.get(0).getName());
+  }
+
+  @Test
+  void searchInFolder_filterByNonMatchingMimeType_returnsEmpty() throws IOException {
+    // .txt files resolve to "text/plain" or null depending on the OS; neither starts with
+    // "image", so the filter must exclude them regardless of the platform's MIME detection.
+    Files.writeString(tempDir.resolve("report-a.txt"), "x");
+    Files.writeString(tempDir.resolve("report-b.txt"), "x");
+
+    SearchFilter filter = new SearchFilter();
+    filter.setMimeType("image");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertTrue(results.isEmpty());
+  }
+
+  @Test
+  void searchInFolder_blankTypeFilter_isIgnored() throws IOException {
+    Files.writeString(tempDir.resolve("report-file.txt"), "x");
+    Files.createDirectory(tempDir.resolve("report-folder"));
+
+    SearchFilter filter = new SearchFilter();
+    filter.setType("");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
+
+    assertEquals(2, results.size());
   }
 }

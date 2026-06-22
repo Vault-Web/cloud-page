@@ -42,6 +42,17 @@ public class FolderService {
   public List<SearchResult> searchInFolder(
       String rootPath, String folderPath, String query, int maxResults, int minScore)
       throws IOException {
+    return searchInFolder(rootPath, folderPath, query, maxResults, minScore, null);
+  }
+
+  public List<SearchResult> searchInFolder(
+      String rootPath,
+      String folderPath,
+      String query,
+      int maxResults,
+      int minScore,
+      SearchFilter filter)
+      throws IOException {
 
     Path folder = Paths.get(rootPath, folderPath).normalize();
     validatePath(rootPath, folder);
@@ -52,6 +63,7 @@ public class FolderService {
 
     // Locale.ROOT prevents using the system's local language for case conversion
     String lowerQuery = query.toLowerCase(Locale.ROOT);
+    SearchFilter effectiveFilter = filter != null ? filter : new SearchFilter();
 
     Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
@@ -60,10 +72,67 @@ public class FolderService {
           .filter(p -> !p.startsWith(trashDir))
           .map(p -> createSearchResult(p, lowerQuery))
           .filter(r -> r.getScore() >= minScore)
-          .sorted((a, b) -> Integer.compare(b.getScore(), a.getScore()))
+          .filter(r -> matchesFilter(r, effectiveFilter))
+          .sorted(searchComparator(effectiveFilter))
           .limit(maxResults)
           .collect(Collectors.toList());
     }
+  }
+
+  /** Returns whether a search result satisfies every set metadata filter. */
+  private boolean matchesFilter(SearchResult result, SearchFilter filter) {
+    if (filter.getType() != null
+        && !filter.getType().isBlank()
+        && !filter.getType().equalsIgnoreCase(result.getType())) {
+      return false;
+    }
+    if (filter.getMimeType() != null && !filter.getMimeType().isBlank()) {
+      String mimeType = result.getMimeType();
+      if (mimeType == null
+          || !mimeType
+              .toLowerCase(Locale.ROOT)
+              .startsWith(filter.getMimeType().toLowerCase(Locale.ROOT))) {
+        return false;
+      }
+    }
+    Long size = result.getSize();
+    if (filter.getMinSize() != null && (size == null || size < filter.getMinSize())) {
+      return false;
+    }
+    if (filter.getMaxSize() != null && (size == null || size > filter.getMaxSize())) {
+      return false;
+    }
+    Long modified = result.getLastModifiedAt();
+    if (filter.getModifiedAfter() != null
+        && (modified == null || modified <= filter.getModifiedAfter())) {
+      return false;
+    }
+    return filter.getModifiedBefore() == null
+        || (modified != null && modified < filter.getModifiedBefore());
+  }
+
+  /** Builds the result comparator for the requested sort field and direction. */
+  private Comparator<SearchResult> searchComparator(SearchFilter filter) {
+    String sortBy =
+        filter.getSortBy() == null ? "relevance" : filter.getSortBy().toLowerCase(Locale.ROOT);
+    Comparator<SearchResult> comparator;
+    switch (sortBy) {
+      case "name":
+        comparator = Comparator.comparing(SearchResult::getName, String.CASE_INSENSITIVE_ORDER);
+        break;
+      case "size":
+        comparator =
+            Comparator.comparing((SearchResult r) -> r.getSize() == null ? -1L : r.getSize());
+        break;
+      case "lastmodified":
+        comparator =
+            Comparator.comparing(
+                (SearchResult r) -> r.getLastModifiedAt() == null ? -1L : r.getLastModifiedAt());
+        break;
+      default:
+        comparator = Comparator.comparingInt(SearchResult::getScore);
+    }
+    return filter.isAscending() ? comparator : comparator.reversed();
   }
 
   /**
@@ -97,6 +166,7 @@ public class FolderService {
           isDir ? "folder" : "file",
           isDir ? null : Files.size(path),
           isDir ? null : Files.probeContentType(path),
+          Files.getLastModifiedTime(path).toMillis(),
           score);
     } catch (IOException e) {
       throw new FileNotFoundException("Could not read file or folder: " + path);
