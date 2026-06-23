@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ public class RateLimitService {
   private final ConcurrentHashMap<RateLimitCategory, TokenBucket> globalBuckets =
       new ConcurrentHashMap<>();
 
+  @Autowired
   public RateLimitService(RateLimitProperties properties, Optional<MeterRegistry> meterRegistry) {
     this(properties, meterRegistry, System::nanoTime);
   }
