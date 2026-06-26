@@ -198,7 +198,8 @@ public class FolderService {
       throws IOException {
     Path parent = Paths.get(rootPath, relativeParentPath).normalize();
     validatePath(rootPath, parent);
-    Path newFolder = parent.resolve(name);
+    Path newFolder = parent.resolve(name).normalize();
+    validatePath(rootPath, newFolder);
     return Files.createDirectory(newFolder);
   }
 

@@ -130,6 +130,13 @@ class FolderServiceTest {
         () -> folderService.createFolder(tempDir.toString(), "../../", "hack"));
   }
 
+  @Test
+  void createFolder_pathTraversalViaName_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.createFolder(tempDir.toString(), "", "../../hack"));
+  }
+
   // ── deleteFolder ─────────────────────────────────────────────────────────
 
   @Test
