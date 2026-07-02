@@ -13,6 +13,7 @@
         - 📁 **controller**
           - 📄 [FileController.java](backend/src/main/java/cloudpage/controller/FileController.java)
           - 📄 [FolderController.java](backend/src/main/java/cloudpage/controller/FolderController.java)
+          - 📄 [TrashController.java](backend/src/main/java/cloudpage/controller/TrashController.java)
         - 📁 **dto**
           - 📄 [FileDto.java](backend/src/main/java/cloudpage/dto/FileDto.java)
           - 📄 [FileResource.java](backend/src/main/java/cloudpage/dto/FileResource.java)
@@ -20,7 +21,9 @@
           - 📄 [FolderDto.java](backend/src/main/java/cloudpage/dto/FolderDto.java)
           - 📄 [FolderListItemDto.java](backend/src/main/java/cloudpage/dto/FolderListItemDto.java)
           - 📄 [PageResponseDto.java](backend/src/main/java/cloudpage/dto/PageResponseDto.java)
+          - 📄 [SearchFilter.java](backend/src/main/java/cloudpage/dto/SearchFilter.java)
           - 📄 [SearchResult.java](backend/src/main/java/cloudpage/dto/SearchResult.java)
+          - 📄 [TrashEntryDto.java](backend/src/main/java/cloudpage/dto/TrashEntryDto.java)
         - 📁 **exceptions**
           - 📄 [FileAccessException.java](backend/src/main/java/cloudpage/exceptions/FileAccessException.java)
           - 📄 [FileDeletionException.java](backend/src/main/java/cloudpage/exceptions/FileDeletionException.java)
@@ -30,8 +33,17 @@
           - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
           - 📄 [UnauthorizedAccessException.java](backend/src/main/java/cloudpage/exceptions/UnauthorizedAccessException.java)
         - 📁 **model**
+          - 📄 [TrashEntry.java](backend/src/main/java/cloudpage/model/TrashEntry.java)
           - 📄 [User.java](backend/src/main/java/cloudpage/model/User.java)
+        - 📁 **ratelimit**
+          - 📄 [RateLimitCategory.java](backend/src/main/java/cloudpage/ratelimit/RateLimitCategory.java)
+          - 📄 [RateLimitDecision.java](backend/src/main/java/cloudpage/ratelimit/RateLimitDecision.java)
+          - 📄 [RateLimitFilter.java](backend/src/main/java/cloudpage/ratelimit/RateLimitFilter.java)
+          - 📄 [RateLimitProperties.java](backend/src/main/java/cloudpage/ratelimit/RateLimitProperties.java)
+          - 📄 [RateLimitService.java](backend/src/main/java/cloudpage/ratelimit/RateLimitService.java)
+          - 📄 [TokenBucket.java](backend/src/main/java/cloudpage/ratelimit/TokenBucket.java)
         - 📁 **repository**
+          - 📄 [TrashEntryRepository.java](backend/src/main/java/cloudpage/repository/TrashEntryRepository.java)
           - 📄 [UserRepository.java](backend/src/main/java/cloudpage/repository/UserRepository.java)
         - 📁 **security**
           - 📄 [JwtAuthFilter.java](backend/src/main/java/cloudpage/security/JwtAuthFilter.java)
@@ -40,6 +52,7 @@
         - 📁 **service**
           - 📄 [FileService.java](backend/src/main/java/cloudpage/service/FileService.java)
           - 📄 [FolderService.java](backend/src/main/java/cloudpage/service/FolderService.java)
+          - 📄 [TrashService.java](backend/src/main/java/cloudpage/service/TrashService.java)
           - 📄 [UserService.java](backend/src/main/java/cloudpage/service/UserService.java)
   - 📁 **test**
     - 📁 **java**
@@ -48,6 +61,11 @@
         - 📁 **controller**
           - 📄 [FileControllerTest.java](backend/src/test/java/cloudpage/controller/FileControllerTest.java)
           - 📄 [FolderControllerTest.java](backend/src/test/java/cloudpage/controller/FolderControllerTest.java)
+          - 📄 [TrashControllerTest.java](backend/src/test/java/cloudpage/controller/TrashControllerTest.java)
+        - 📁 **ratelimit**
+          - 📄 [RateLimitFilterTest.java](backend/src/test/java/cloudpage/ratelimit/RateLimitFilterTest.java)
+          - 📄 [RateLimitServiceTest.java](backend/src/test/java/cloudpage/ratelimit/RateLimitServiceTest.java)
         - 📁 **service**
           - 📄 [FileServiceTest.java](backend/src/test/java/cloudpage/service/FileServiceTest.java)
           - 📄 [FolderServiceTest.java](backend/src/test/java/cloudpage/service/FolderServiceTest.java)
+          - 📄 [TrashServiceTest.java](backend/src/test/java/cloudpage/service/TrashServiceTest.java)
