@@ -92,12 +92,25 @@ public class FileService {
     Files.deleteIfExists(file);
   }
 
-  public void deleteFiles(String rootPath, List<String> relativeFilePaths) throws IOException {
+  public java.util.Map<String, String> deleteFiles(String rootPath, java.util.List<String> relativeFilePaths) {
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
     for (String relativeFilePath : relativeFilePaths) {
-      Path file = Paths.get(rootPath, relativeFilePath).normalize();
-      validatePath(rootPath, file);
-      Files.deleteIfExists(file);
+      try {
+        Path file = Paths.get(rootPath, relativeFilePath).normalize();
+        validatePath(rootPath, file);
+        boolean deleted = Files.deleteIfExists(file);
+        if(deleted) {
+          results.put(relativeFilePath, "SUCCESS");
+        }
+        else {
+          results.put(relativeFilePath, "FAILED: Item not found");
+        }
+      }
+      catch (Exception e) {
+        results.put(relativeFilePath, "FAILED: " + e.getMessage());
+      }
     }
+    return results;
   }
 
   /**

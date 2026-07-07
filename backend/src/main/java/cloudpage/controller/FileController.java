@@ -32,7 +32,7 @@ public class FileController {
 
   @PostMapping("/upload")
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
-      throws IOException {
+          throws IOException {
     var user = userService.getCurrentUser();
     fileService.uploadFile(user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb());
   }
@@ -58,18 +58,18 @@ public class FileController {
   }
 
   @DeleteMapping("/bulk")
-  public void deleteFiles(@RequestParam List<String> filePaths) throws IOException {
+  public ResponseEntity<java.util.Map<String, String>> deleteFiles(@RequestParam java.util.List<String> filePaths) {
     var user = userService.getCurrentUser();
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
     for (String filePath : filePaths) {
-      trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
+      try {
+        trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
+        results.put(filePath, "SUCCESS");
+      } catch (Exception e) {
+        results.put(filePath, "FAILED: " + e.getMessage());
+      }
     }
-  }
-
-  @PatchMapping("/move")
-  public void renameOrMoveFile(@RequestParam String filePath, @RequestParam String newPath)
-      throws IOException {
-    var user = userService.getCurrentUser();
-    fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, newPath);
+    return ResponseEntity.ok(results);
   }
 
   @GetMapping("/download")
@@ -85,13 +85,13 @@ public class FileController {
     }
 
     return ResponseEntity.ok()
-        .eTag(result.getETag())
-        .lastModified(result.getLastModified())
-        .header(HttpHeaders.CONTENT_TYPE, mimeType)
-        .header(
-            HttpHeaders.CONTENT_DISPOSITION,
-            "attachment; filename=\"" + fullPath.getFileName() + "\"")
-        .body(result.getResource());
+            .eTag(result.getETag())
+            .lastModified(result.getLastModified())
+            .header(HttpHeaders.CONTENT_TYPE, mimeType)
+            .header(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + fullPath.getFileName() + "\"")
+            .body(result.getResource());
   }
 
   @GetMapping("/view")
@@ -111,5 +111,22 @@ public class FileController {
     }
 
     return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, mimeType).body(resource);
+  }
+
+  @PatchMapping("/bulk/move")
+  public ResponseEntity<java.util.Map<String, String>> moveFiles(
+          @RequestParam java.util.List<String> filePaths,
+          @RequestParam String targetPath) {
+    var user = userService.getCurrentUser();
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
+    for (String filePath : filePaths) {
+      try {
+        fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, targetPath + "/" + new java.io.File(filePath).getName());
+        results.put(filePath, "SUCCESS");
+      } catch (Exception e) {
+        results.put(filePath, "FAILED: " + e.getMessage());
+      }
+    }
+    return ResponseEntity.ok(results);
   }
 }
