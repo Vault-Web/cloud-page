@@ -14,6 +14,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
 
 /**
  * Service for file-level operations within a user's storage area: uploading, deleting, renaming or
@@ -89,6 +90,14 @@ public class FileService {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
     validatePath(rootPath, file);
     Files.deleteIfExists(file);
+  }
+
+  public void deleteFiles(String rootPath, List<String> relativeFilePaths) throws IOException {
+    for (String relativeFilePath : relativeFilePaths) {
+      Path file = Paths.get(rootPath, relativeFilePath).normalize();
+      validatePath(rootPath, file);
+      Files.deleteIfExists(file);
+    }
   }
 
   /**

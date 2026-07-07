@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -53,6 +55,14 @@ public class FileController {
   public void deleteFile(@RequestParam String filePath) throws IOException {
     var user = userService.getCurrentUser();
     trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
+  }
+
+  @DeleteMapping("/bulk")
+  public void deleteFiles(@RequestParam List<String> filePaths) throws IOException {
+    var user = userService.getCurrentUser();
+    for (String filePath : filePaths) {
+      trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
+    }
   }
 
   @PatchMapping("/move")
