@@ -10,8 +10,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -32,7 +30,7 @@ public class FileController {
 
   @PostMapping("/upload")
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
-          throws IOException {
+      throws IOException {
     var user = userService.getCurrentUser();
     fileService.uploadFile(user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb());
   }
@@ -58,7 +56,8 @@ public class FileController {
   }
 
   @DeleteMapping("/bulk")
-  public ResponseEntity<java.util.Map<String, String>> deleteFiles(@RequestParam java.util.List<String> filePaths) {
+  public ResponseEntity<java.util.Map<String, String>> deleteFiles(
+      @RequestParam java.util.List<String> filePaths) {
     var user = userService.getCurrentUser();
     java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
     for (String filePath : filePaths) {
@@ -85,13 +84,13 @@ public class FileController {
     }
 
     return ResponseEntity.ok()
-            .eTag(result.getETag())
-            .lastModified(result.getLastModified())
-            .header(HttpHeaders.CONTENT_TYPE, mimeType)
-            .header(
-                    HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + fullPath.getFileName() + "\"")
-            .body(result.getResource());
+        .eTag(result.getETag())
+        .lastModified(result.getLastModified())
+        .header(HttpHeaders.CONTENT_TYPE, mimeType)
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"" + fullPath.getFileName() + "\"")
+        .body(result.getResource());
   }
 
   @GetMapping("/view")
@@ -115,13 +114,15 @@ public class FileController {
 
   @PatchMapping("/bulk/move")
   public ResponseEntity<java.util.Map<String, String>> moveFiles(
-          @RequestParam java.util.List<String> filePaths,
-          @RequestParam String targetPath) {
+      @RequestParam java.util.List<String> filePaths, @RequestParam String targetPath) {
     var user = userService.getCurrentUser();
     java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
     for (String filePath : filePaths) {
       try {
-        fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, targetPath + "/" + new java.io.File(filePath).getName());
+        fileService.renameOrMoveFile(
+            user.getRootFolderPath(),
+            filePath,
+            targetPath + "/" + new java.io.File(filePath).getName());
         results.put(filePath, "SUCCESS");
       } catch (Exception e) {
         results.put(filePath, "FAILED: " + e.getMessage());
