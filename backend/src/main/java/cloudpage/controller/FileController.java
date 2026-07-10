@@ -1,5 +1,6 @@
 package cloudpage.controller;
 
+import cloudpage.dto.ChecksumDto;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.service.FileService;
@@ -101,5 +102,15 @@ public class FileController {
     }
 
     return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, mimeType).body(resource);
+  }
+
+  @GetMapping("/checksum")
+  public ResponseEntity<ChecksumDto> getFileChecksum(
+      @RequestParam String path, @RequestParam(required = false) String expected)
+      throws IOException {
+    var user = userService.getCurrentUser();
+    String checksum = fileService.calculateChecksum(user.getRootFolderPath(), path);
+    Boolean match = (expected == null) ? null : checksum.equalsIgnoreCase(expected);
+    return ResponseEntity.ok(new ChecksumDto(FileService.CHECKSUM_ALGORITHM, checksum, match));
   }
 }

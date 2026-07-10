@@ -238,4 +238,39 @@ class FileServiceTest {
     // ETag format is "size-lastModifiedMillis"
     assertTrue(result.getETag().startsWith("\"5-"));
   }
+
+  // ── calculateChecksum ────────────────────────────────────────────────────
+
+  @Test
+  void calculateChecksum_knownContent_returnsExpectedSha256() throws IOException {
+    Files.writeString(tempDir.resolve("hello.txt"), "Hello World");
+
+    String checksum = fileService.calculateChecksum(tempDir.toString(), "hello.txt");
+
+    // Well-known SHA-256 of the ASCII string "Hello World".
+    assertEquals("a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e", checksum);
+  }
+
+  @Test
+  void calculateChecksum_fileNotFound_throwsResourceNotFoundException() {
+    assertThrows(
+        ResourceNotFoundException.class,
+        () -> fileService.calculateChecksum(tempDir.toString(), "ghost.txt"));
+  }
+
+  @Test
+  void calculateChecksum_directory_throwsResourceNotFoundException() throws IOException {
+    Files.createDirectory(tempDir.resolve("aFolder"));
+
+    assertThrows(
+        ResourceNotFoundException.class,
+        () -> fileService.calculateChecksum(tempDir.toString(), "aFolder"));
+  }
+
+  @Test
+  void calculateChecksum_pathTraversal_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.calculateChecksum(tempDir.toString(), "../../etc/passwd"));
+  }
 }

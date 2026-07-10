@@ -163,4 +163,38 @@ class FileControllerTest {
         .perform(get("/api/files/view").param("path", "nofile.txt"))
         .andExpect(status().isNotFound());
   }
+
+  // ── GET /api/files/checksum ──────────────────────────────────────────────
+
+  @Test
+  void getFileChecksum_returnsAlgorithmAndChecksum() throws Exception {
+    when(fileService.calculateChecksum(tempDir.toString(), "doc.pdf")).thenReturn("abc123");
+
+    mockMvc
+        .perform(get("/api/files/checksum").param("path", "doc.pdf"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.algorithm").value("SHA-256"))
+        .andExpect(jsonPath("$.checksum").value("abc123"))
+        .andExpect(jsonPath("$.match").doesNotExist());
+  }
+
+  @Test
+  void getFileChecksum_withMatchingExpected_returnsMatchTrue() throws Exception {
+    when(fileService.calculateChecksum(tempDir.toString(), "doc.pdf")).thenReturn("ABC123");
+
+    mockMvc
+        .perform(get("/api/files/checksum").param("path", "doc.pdf").param("expected", "abc123"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.match").value(true));
+  }
+
+  @Test
+  void getFileChecksum_withWrongExpected_returnsMatchFalse() throws Exception {
+    when(fileService.calculateChecksum(tempDir.toString(), "doc.pdf")).thenReturn("abc123");
+
+    mockMvc
+        .perform(get("/api/files/checksum").param("path", "doc.pdf").param("expected", "deadbeef"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.match").value(false));
+  }
 }
