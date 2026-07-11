@@ -5,11 +5,14 @@ import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -128,6 +131,60 @@ public class FileService {
     }
 
     return Files.readString(file);
+  }
+
+  /** Algorithm used for file integrity checksums. */
+  public static final String CHECKSUM_ALGORITHM = "SHA-256";
+
+  /**
+   * Computes the SHA-256 checksum of a file, confined to the user's root directory. The file is
+   * streamed rather than loaded fully into memory, so large files are handled safely.
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param relativeFilePath the relative path of the file to checksum
+   * @return the lowercase hex-encoded SHA-256 digest of the file content
+   * @throws IOException if the file cannot be read
+   * @throws InvalidPathException if the file is outside the user's root directory
+   * @throws ResourceNotFoundException if the file does not exist or is not a regular file
+   */
+  public String calculateChecksum(String rootPath, String relativeFilePath) throws IOException {
+    Path file = Paths.get(rootPath, relativeFilePath).normalize();
+    validatePath(rootPath, file);
+
+    if (!Files.exists(file) || !Files.isRegularFile(file)) {
+      throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
+    }
+
+    // Pin the fully resolved real path and re-check it is inside the root before opening it, so a
+    // symlink swap racing with validation cannot redirect the read to a host file outside the root.
+    Path realFile = file.toRealPath();
+    if (!realFile.startsWith(Paths.get(rootPath).toRealPath())) {
+      throw new InvalidPathException("Path traversal attempt detected: " + relativeFilePath);
+    }
+
+    try {
+      MessageDigest digest = MessageDigest.getInstance(CHECKSUM_ALGORITHM);
+      byte[] buffer = new byte[8192];
+      try (InputStream in = Files.newInputStream(realFile)) {
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+          digest.update(buffer, 0, read);
+        }
+      }
+      return toHex(digest.digest());
+    } catch (NoSuchAlgorithmException e) {
+      // SHA-256 is mandated by the Java platform, so this should never happen.
+      throw new IllegalStateException("SHA-256 algorithm not available", e);
+    }
+  }
+
+  private static String toHex(byte[] bytes) {
+    StringBuilder sb = new StringBuilder(bytes.length * 2);
+    for (byte b : bytes) {
+      sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+      sb.append(Character.forDigit(b & 0xF, 16));
+    }
+    return sb.toString();
   }
 
   /**
