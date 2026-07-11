@@ -155,10 +155,17 @@ public class FileService {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
     }
 
+    // Pin the fully resolved real path and re-check it is inside the root before opening it, so a
+    // symlink swap racing with validation cannot redirect the read to a host file outside the root.
+    Path realFile = file.toRealPath();
+    if (!realFile.startsWith(Paths.get(rootPath).toRealPath())) {
+      throw new InvalidPathException("Path traversal attempt detected: " + relativeFilePath);
+    }
+
     try {
       MessageDigest digest = MessageDigest.getInstance(CHECKSUM_ALGORITHM);
       byte[] buffer = new byte[8192];
-      try (InputStream in = Files.newInputStream(file)) {
+      try (InputStream in = Files.newInputStream(realFile)) {
         int read;
         while ((read = in.read(buffer)) != -1) {
           digest.update(buffer, 0, read);

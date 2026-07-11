@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
+import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.model.User;
 import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
@@ -196,5 +198,25 @@ class FileControllerTest {
         .perform(get("/api/files/checksum").param("path", "doc.pdf").param("expected", "deadbeef"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.match").value(false));
+  }
+
+  @Test
+  void getFileChecksum_fileNotFound_returns404() throws Exception {
+    when(fileService.calculateChecksum(tempDir.toString(), "ghost.txt"))
+        .thenThrow(new ResourceNotFoundException("File", "FilePath", "ghost.txt"));
+
+    mockMvc
+        .perform(get("/api/files/checksum").param("path", "ghost.txt"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void getFileChecksum_pathTraversal_returns400() throws Exception {
+    when(fileService.calculateChecksum(tempDir.toString(), "../../etc/passwd"))
+        .thenThrow(new InvalidPathException("Path traversal attempt detected"));
+
+    mockMvc
+        .perform(get("/api/files/checksum").param("path", "../../etc/passwd"))
+        .andExpect(status().isBadRequest());
   }
 }
