@@ -9,6 +9,8 @@ import cloudpage.service.TrashService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +40,9 @@ class VirusScanServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new VirusScanService(FAKE_SCANNER, new FolderService(), SYNC_EXECUTOR);
+    service =
+        new VirusScanService(
+            FAKE_SCANNER, new FolderService(), SYNC_EXECUTOR, new VirusScanProperties());
   }
 
   @Test
@@ -129,5 +133,35 @@ class VirusScanServiceTest {
     ScanJob job = service.startScan(tempDir.toString(), "owner", "");
 
     assertSame(job, service.getJob(job.getId(), "owner"));
+  }
+
+  @Test
+  void startScan_scannerThrowsRuntime_recordedAsErrorAndScanCompletes() throws IOException {
+    VirusScanner throwing =
+        file -> {
+          throw new RuntimeException("boom");
+        };
+    VirusScanService svc =
+        new VirusScanService(
+            throwing, new FolderService(), SYNC_EXECUTOR, new VirusScanProperties());
+    Files.writeString(tempDir.resolve("a.txt"), "data");
+
+    ScanJob job = svc.startScan(tempDir.toString(), "user-1", "");
+
+    // A runtime failure on one file must not leave the job stuck in RUNNING.
+    assertEquals(ScanStatus.COMPLETED, job.getStatus());
+    assertEquals(1, job.getFilesScanned());
+    assertEquals(ScanVerdict.ERROR, job.getFindings().get(0).verdict());
+  }
+
+  @Test
+  void evictExpiredJobs_removesOldFinishedJobs() throws IOException {
+    Files.writeString(tempDir.resolve("a.txt"), "safe");
+    ScanJob job = service.startScan(tempDir.toString(), "user-1", "");
+    job.setFinishedAt(Instant.now().minus(Duration.ofHours(2)));
+
+    service.evictExpiredJobs();
+
+    assertThrows(ResourceNotFoundException.class, () -> service.getJob(job.getId(), "user-1"));
   }
 }

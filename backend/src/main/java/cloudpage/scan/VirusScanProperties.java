@@ -31,4 +31,10 @@ public class VirusScanProperties {
 
   /** Maximum number of folder scans that may run concurrently across the instance. */
   private int maxConcurrentScans = 2;
+
+  /**
+   * How long a finished (completed or failed) scan job is retained in memory before it is evicted
+   * by the periodic cleanup.
+   */
+  private int retentionMinutes = 60;
 }

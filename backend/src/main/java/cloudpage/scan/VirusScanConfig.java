@@ -13,9 +13,12 @@ public class VirusScanConfig {
 
   @Bean(name = "virusScanExecutor")
   public Executor virusScanExecutor(VirusScanProperties properties) {
+    int concurrency = Math.max(1, properties.getMaxConcurrentScans());
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-    executor.setCorePoolSize(1);
-    executor.setMaxPoolSize(Math.max(1, properties.getMaxConcurrentScans()));
+    // Core == max so that up to maxConcurrentScans run in parallel instead of queueing behind a
+    // single core thread.
+    executor.setCorePoolSize(concurrency);
+    executor.setMaxPoolSize(concurrency);
     executor.setQueueCapacity(50);
     executor.setThreadNamePrefix("virus-scan-");
     executor.initialize();
