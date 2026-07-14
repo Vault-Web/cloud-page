@@ -6,5 +6,6 @@ cloudpage.exceptions
 cloudpage.model
 cloudpage.ratelimit
 cloudpage.repository
+cloudpage.scan
 cloudpage.security
 cloudpage.service
