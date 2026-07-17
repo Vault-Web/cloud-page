@@ -26,6 +26,14 @@ class RateLimitServiceTest {
   }
 
   @Test
+  void scanDefaultsToOneRequestEveryFiveMinutes() {
+    RateLimitProperties.Policy scan = new RateLimitProperties().getPerClient().getScan();
+
+    assertEquals(1, scan.getCapacity());
+    assertEquals(Duration.ofMinutes(5), scan.getRefillPeriod());
+  }
+
+  @Test
   void allowsUpToCapacityThenThrottles() {
     RateLimitService service = serviceWith(perClientUpload(3, Duration.ofMinutes(1)));
 

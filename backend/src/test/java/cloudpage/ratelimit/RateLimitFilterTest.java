@@ -163,4 +163,45 @@ class RateLimitFilterTest {
     assertEquals(200, otherResponse.getStatus());
     assertNotNull(otherChain.getRequest());
   }
+
+  @Test
+  void scanStartIsLimitedButStatusPollingIsNot() throws Exception {
+    RateLimitProperties properties = new RateLimitProperties();
+    properties.getPerClient().setScan(new RateLimitProperties.Policy(1, Duration.ofMinutes(5)));
+    RateLimitFilter filter = filterWith(properties);
+    authenticate("alice");
+
+    filter.doFilter(
+        request("POST", "/api/files/scan"), new MockHttpServletResponse(), new MockFilterChain());
+
+    MockHttpServletResponse limitedResponse = new MockHttpServletResponse();
+    MockFilterChain limitedChain = new MockFilterChain();
+    filter.doFilter(request("POST", "/api/files/scan"), limitedResponse, limitedChain);
+
+    assertEquals(429, limitedResponse.getStatus());
+    assertNull(limitedChain.getRequest());
+    assertTrue(limitedResponse.getContentAsString().contains("\"category\":\"SCAN\""));
+    assertNotNull(limitedResponse.getHeader(HttpHeaders.RETRY_AFTER));
+
+    MockHttpServletResponse pollingResponse = new MockHttpServletResponse();
+    MockFilterChain pollingChain = new MockFilterChain();
+    filter.doFilter(request("GET", "/api/files/scan/job-1"), pollingResponse, pollingChain);
+
+    assertEquals(200, pollingResponse.getStatus());
+    assertNotNull(pollingChain.getRequest());
+  }
+
+  @Test
+  void nonPositiveScanCapacityDisablesScanLimit() throws Exception {
+    RateLimitProperties properties = new RateLimitProperties();
+    properties.getPerClient().setScan(new RateLimitProperties.Policy(0, Duration.ofMinutes(5)));
+    RateLimitFilter filter = filterWith(properties);
+    authenticate("alice");
+
+    for (int i = 0; i < 5; i++) {
+      MockFilterChain chain = new MockFilterChain();
+      filter.doFilter(request("POST", "/api/files/scan"), new MockHttpServletResponse(), chain);
+      assertNotNull(chain.getRequest());
+    }
+  }
 }

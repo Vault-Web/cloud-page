@@ -59,12 +59,14 @@ public class RateLimitProperties {
     private Policy upload = new Policy();
     private Policy download = new Policy();
     private Policy listing = new Policy();
+    private Policy scan = new Policy();
 
     static Tier defaults() {
       Tier tier = new Tier();
       tier.upload = new Policy(30, Duration.ofMinutes(1));
       tier.download = new Policy(120, Duration.ofMinutes(1));
       tier.listing = new Policy(240, Duration.ofMinutes(1));
+      tier.scan = new Policy(1, Duration.ofMinutes(5));
       return tier;
     }
 
@@ -77,6 +79,7 @@ public class RateLimitProperties {
         case UPLOAD -> upload;
         case DOWNLOAD -> download;
         case LISTING -> listing;
+        case SCAN -> scan;
       };
     }
 
@@ -102,6 +105,14 @@ public class RateLimitProperties {
 
     public void setListing(Policy listing) {
       this.listing = listing;
+    }
+
+    public Policy getScan() {
+      return scan;
+    }
+
+    public void setScan(Policy scan) {
+      this.scan = scan;
     }
   }
 
