@@ -151,16 +151,39 @@ class FileControllerTest {
 
   @Test
   void viewFile_existingFile_returnsResourceWithContentType() throws Exception {
-    Files.writeString(tempDir.resolve("view.txt"), "viewme");
+    Path file = Files.writeString(tempDir.resolve("view.txt"), "viewme");
+    FileResource fileResource =
+        new FileResource(new UrlResource(file.toUri()), "\"6-123456\"", 123456L);
+    when(fileService.loadAsResource(any(Path.class))).thenReturn(fileResource);
 
     mockMvc
         .perform(get("/api/files/view").param("path", "view.txt"))
         .andExpect(status().isOk())
-        .andExpect(header().exists("Content-Type"));
+        .andExpect(header().string("Content-Type", "text/plain"))
+        .andExpect(header().string("Content-Disposition", "inline; filename=\"view.txt\""))
+        .andExpect(header().string("ETag", "\"6-123456\""))
+        .andExpect(header().exists("Last-Modified"));
+  }
+
+  @Test
+  void viewFile_rangeRequest_returnsPartialContent() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("video.mp4"), "0123456789");
+    FileResource fileResource =
+        new FileResource(new UrlResource(file.toUri()), "\"10-123456\"", 123456L);
+    when(fileService.loadAsResource(any(Path.class))).thenReturn(fileResource);
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "video.mp4").header("Range", "bytes=2-5"))
+        .andExpect(status().isPartialContent())
+        .andExpect(header().string("Content-Range", "bytes 2-5/10"))
+        .andExpect(content().bytes("2345".getBytes()));
   }
 
   @Test
   void viewFile_nonExistentFile_returns404() throws Exception {
+    when(fileService.loadAsResource(any(Path.class)))
+        .thenThrow(new FileNotFoundException("File not found"));
+
     mockMvc
         .perform(get("/api/files/view").param("path", "nofile.txt"))
         .andExpect(status().isNotFound());

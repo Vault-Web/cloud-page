@@ -13,8 +13,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -91,17 +92,23 @@ public class FileController {
     Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
     folderService.validatePath(user.getRootFolderPath(), fullPath);
 
-    if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
-      throw new FileNotFoundException("File Not Found with path : " + path);
-    }
-
-    Resource resource = new UrlResource(fullPath.toUri());
+    FileResource result = fileService.loadAsResource(fullPath);
     String mimeType = Files.probeContentType(fullPath);
     if (mimeType == null) {
       mimeType = "application/octet-stream";
     }
 
-    return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, mimeType).body(resource);
+    return ResponseEntity.ok()
+        .eTag(result.getETag())
+        .lastModified(result.getLastModified())
+        .contentType(MediaType.parseMediaType(mimeType))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.inline()
+                .filename(fullPath.getFileName().toString())
+                .build()
+                .toString())
+        .body(result.getResource());
   }
 
   @GetMapping("/checksum")

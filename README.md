@@ -36,6 +36,30 @@ GET /api/folders/search?folderPath=/&query=report&type=file&minSize=1024&sortBy=
 
 ---
 
+## Inline file viewing
+
+`GET /api/files/view?path=<user-relative-path>` serves a file for display in the browser. The
+response keeps the file's detected MIME type, uses `Content-Disposition: inline`, and supports
+HTTP byte-range requests for seeking in video, audio, and PDF files. Unknown file types use
+`application/octet-stream`, allowing the client to show a download fallback.
+
+The endpoint uses the same authenticated user root and path validation as the other file APIs.
+Viewer actions can reuse the existing endpoints:
+
+| Action | Endpoint |
+|-------|----------|
+| Rename or move | `PATCH /api/files/move?filePath=<path>&newPath=<path>` |
+| Delete (move to trash) | `DELETE /api/files?filePath=<path>` |
+| Download | `GET /api/files/download?path=<path>` |
+| Next/previous source list | `GET /api/folders/content?path=<folder>&page=<page>&size=<size>` |
+
+All requests require the existing bearer-token authentication. A frontend using native
+`<video>`, `<audio>`, `<img>`, or embedded PDF elements should expose the endpoint through its
+authenticated same-origin backend/proxy, because those elements cannot attach an arbitrary
+`Authorization` request header.
+
+---
+
 ## Project Structure
 
 - Backend implemented in **Spring Boot**  
