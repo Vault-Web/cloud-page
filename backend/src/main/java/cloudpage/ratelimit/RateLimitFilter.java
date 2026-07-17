@@ -101,6 +101,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if ("GET".equals(method) && (path.equals("/api/folders") || path.startsWith("/api/folders/"))) {
       return RateLimitCategory.LISTING;
     }
+    if ("POST".equals(method) && "/api/secure-sends".equals(path)) {
+      return RateLimitCategory.SECURE_SEND_CREATE;
+    }
+    if ("GET".equals(method) && path.startsWith("/api/public/secure-sends/")) {
+      return RateLimitCategory.SECURE_SEND_ACCESS;
+    }
     return null;
   }
 

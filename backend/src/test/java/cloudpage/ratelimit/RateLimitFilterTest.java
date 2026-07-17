@@ -204,4 +204,27 @@ class RateLimitFilterTest {
       assertNotNull(chain.getRequest());
     }
   }
+
+  @Test
+  void secureSendCreationAndPublicAccessHaveSeparateBudgets() throws Exception {
+    RateLimitProperties properties = new RateLimitProperties();
+    properties
+        .getPerClient()
+        .setSecureSendCreate(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    properties
+        .getPerClient()
+        .setSecureSendAccess(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    RateLimitFilter filter = filterWith(properties);
+    authenticate("alice");
+
+    filter.doFilter(
+        request("POST", "/api/secure-sends"), new MockHttpServletResponse(), new MockFilterChain());
+
+    MockHttpServletRequest publicRequest = request("GET", "/api/public/secure-sends/some-token");
+    publicRequest.setRemoteAddr("10.0.0.1");
+    MockFilterChain chain = new MockFilterChain();
+    filter.doFilter(publicRequest, new MockHttpServletResponse(), chain);
+
+    assertNotNull(chain.getRequest());
+  }
 }

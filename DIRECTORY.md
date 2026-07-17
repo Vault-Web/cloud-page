@@ -13,7 +13,11 @@
         - 📁 **controller**
           - 📄 [FileController.java](backend/src/main/java/cloudpage/controller/FileController.java)
           - 📄 [FolderController.java](backend/src/main/java/cloudpage/controller/FolderController.java)
+          - 📄 [SecureSendController.java](backend/src/main/java/cloudpage/controller/SecureSendController.java)
+          - 📄 [TrashController.java](backend/src/main/java/cloudpage/controller/TrashController.java)
+          - 📄 [VirusScanController.java](backend/src/main/java/cloudpage/controller/VirusScanController.java)
         - 📁 **dto**
+          - 📄 [CreateSecureSendRequest.java](backend/src/main/java/cloudpage/dto/CreateSecureSendRequest.java)
           - 📄 [FileDto.java](backend/src/main/java/cloudpage/dto/FileDto.java)
           - 📄 [FileResource.java](backend/src/main/java/cloudpage/dto/FileResource.java)
           - 📄 [FolderContentItemDto.java](backend/src/main/java/cloudpage/dto/FolderContentItemDto.java)
@@ -21,6 +25,8 @@
           - 📄 [FolderListItemDto.java](backend/src/main/java/cloudpage/dto/FolderListItemDto.java)
           - 📄 [PageResponseDto.java](backend/src/main/java/cloudpage/dto/PageResponseDto.java)
           - 📄 [SearchResult.java](backend/src/main/java/cloudpage/dto/SearchResult.java)
+          - 📄 [SecureSendDto.java](backend/src/main/java/cloudpage/dto/SecureSendDto.java)
+          - 📄 [TrashEntryDto.java](backend/src/main/java/cloudpage/dto/TrashEntryDto.java)
         - 📁 **exceptions**
           - 📄 [FileAccessException.java](backend/src/main/java/cloudpage/exceptions/FileAccessException.java)
           - 📄 [FileDeletionException.java](backend/src/main/java/cloudpage/exceptions/FileDeletionException.java)
@@ -30,8 +36,12 @@
           - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
           - 📄 [UnauthorizedAccessException.java](backend/src/main/java/cloudpage/exceptions/UnauthorizedAccessException.java)
         - 📁 **model**
+          - 📄 [SecureSend.java](backend/src/main/java/cloudpage/model/SecureSend.java)
+          - 📄 [TrashEntry.java](backend/src/main/java/cloudpage/model/TrashEntry.java)
           - 📄 [User.java](backend/src/main/java/cloudpage/model/User.java)
         - 📁 **repository**
+          - 📄 [SecureSendRepository.java](backend/src/main/java/cloudpage/repository/SecureSendRepository.java)
+          - 📄 [TrashEntryRepository.java](backend/src/main/java/cloudpage/repository/TrashEntryRepository.java)
           - 📄 [UserRepository.java](backend/src/main/java/cloudpage/repository/UserRepository.java)
         - 📁 **security**
           - 📄 [JwtAuthFilter.java](backend/src/main/java/cloudpage/security/JwtAuthFilter.java)
@@ -40,6 +50,8 @@
         - 📁 **service**
           - 📄 [FileService.java](backend/src/main/java/cloudpage/service/FileService.java)
           - 📄 [FolderService.java](backend/src/main/java/cloudpage/service/FolderService.java)
+          - 📄 [SecureSendService.java](backend/src/main/java/cloudpage/service/SecureSendService.java)
+          - 📄 [TrashService.java](backend/src/main/java/cloudpage/service/TrashService.java)
           - 📄 [UserService.java](backend/src/main/java/cloudpage/service/UserService.java)
   - 📁 **test**
     - 📁 **java**
