@@ -4,5 +4,6 @@ package cloudpage.ratelimit;
 public enum RateLimitCategory {
   UPLOAD,
   DOWNLOAD,
-  LISTING
+  LISTING,
+  SCAN
 }

@@ -17,8 +17,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Applies per-user / per-IP (and optional instance-wide) rate limits to the file upload, download
- * and listing endpoints.
+ * Applies per-user / per-IP (and optional instance-wide) rate limits to the file upload, download,
+ * listing and virus scan start endpoints.
  *
  * <p>Runs right after {@link cloudpage.security.JwtAuthFilter} so the authenticated principal, when
  * present, is used as the bucket key (the client IP is used as a fallback). Requests that exceed
@@ -88,6 +88,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     String path = request.getServletPath();
     if ("POST".equals(method) && "/api/files/upload".equals(path)) {
       return RateLimitCategory.UPLOAD;
+    }
+    if ("POST".equals(method) && "/api/files/scan".equals(path)) {
+      return RateLimitCategory.SCAN;
     }
     if ("GET".equals(method)
         && ("/api/files/download".equals(path)
