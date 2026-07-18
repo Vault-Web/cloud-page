@@ -8,6 +8,7 @@ import cloudpage.service.FolderService;
 import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -105,7 +106,7 @@ public class FileController {
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
             ContentDisposition.inline()
-                .filename(fullPath.getFileName().toString())
+                .filename(fullPath.getFileName().toString(), StandardCharsets.UTF_8)
                 .build()
                 .toString())
         .body(result.getResource());
