@@ -151,16 +151,149 @@ class FileControllerTest {
 
   @Test
   void viewFile_existingFile_returnsResourceWithContentType() throws Exception {
-    Files.writeString(tempDir.resolve("view.txt"), "viewme");
+    Path file = Files.writeString(tempDir.resolve("view.txt"), "viewme");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
 
     mockMvc
         .perform(get("/api/files/view").param("path", "view.txt"))
         .andExpect(status().isOk())
-        .andExpect(header().exists("Content-Type"));
+        .andExpect(header().string("Content-Type", "text/plain"))
+        .andExpect(
+            header()
+                .string(
+                    "Content-Disposition",
+                    org.hamcrest.Matchers.containsString("filename*=UTF-8''view.txt")))
+        .andExpect(header().string("ETag", org.hamcrest.Matchers.startsWith("\"6-")))
+        .andExpect(header().exists("Last-Modified"))
+        .andExpect(content().string("viewme"));
+  }
+
+  @Test
+  void viewFile_rangeRequest_returnsPartialContent() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("video.mp4"), "0123456789");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "video.mp4").header("Range", "bytes=2-5"))
+        .andExpect(status().isPartialContent())
+        .andExpect(header().string("Content-Range", "bytes 2-5/10"))
+        .andExpect(content().bytes("2345".getBytes()));
+  }
+
+  @Test
+  void viewFile_openRange_returnsRemainingContent() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("audio.mp3"), "0123456789");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "audio.mp3").header("Range", "bytes=6-"))
+        .andExpect(status().isPartialContent())
+        .andExpect(header().string("Content-Range", "bytes 6-9/10"))
+        .andExpect(content().bytes("6789".getBytes()));
+  }
+
+  @Test
+  void viewFile_suffixRange_returnsLastBytes() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("document.pdf"), "0123456789");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "document.pdf").header("Range", "bytes=-4"))
+        .andExpect(status().isPartialContent())
+        .andExpect(header().string("Content-Range", "bytes 6-9/10"))
+        .andExpect(content().bytes("6789".getBytes()));
+  }
+
+  @Test
+  void viewFile_withoutRange_returnsFullContent() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("image.png"), "0123456789");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "image.png"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("0123456789".getBytes()));
+  }
+
+  @Test
+  void viewFile_unsatisfiableRange_returns416() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("video.mp4"), "0123456789");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "video.mp4").header("Range", "bytes=20-30"))
+        .andExpect(status().isRequestedRangeNotSatisfiable())
+        .andExpect(header().string("Content-Range", "bytes */10"));
+  }
+
+  @Test
+  void viewFile_unknownMimeType_returnsOctetStream() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("archive.cloudpage-unknown"), "data");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "archive.cloudpage-unknown"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Type", "application/octet-stream"));
+  }
+
+  @Test
+  void viewFile_nonAsciiFilename_usesSafeInlineContentDisposition() throws Exception {
+    String filename = "Urlaub Zürich 2026.pdf";
+    Path file = Files.writeString(tempDir.resolve(filename), "data");
+    when(fileService.loadAsResource(file)).thenCallRealMethod();
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", filename))
+        .andExpect(status().isOk())
+        .andExpect(
+            header()
+                .string(
+                    "Content-Disposition",
+                    org.hamcrest.Matchers.containsString(
+                        "filename*=UTF-8''Urlaub%20Z%C3%BCrich%202026.pdf")));
+  }
+
+  @Test
+  void viewFile_pathTraversal_returns400() throws Exception {
+    Path root = Files.createDirectories(tempDir.resolve("root/nested"));
+    Files.writeString(tempDir.resolve("outside.pdf"), "secret");
+    testUser.setRootFolderPath(root.toString());
+    doCallRealMethod().when(folderService).validatePath(eq(root.toString()), any(Path.class));
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "../../outside.pdf"))
+        .andExpect(status().isBadRequest());
+
+    verify(fileService, never()).loadAsResource(any(Path.class));
+  }
+
+  @Test
+  void viewFile_symlinkOutsideUserRoot_returns400() throws Exception {
+    Path root = Files.createDirectory(tempDir.resolve("root"));
+    Path outside = Files.writeString(tempDir.resolve("outside.pdf"), "secret");
+    Path link = root.resolve("linked.pdf");
+    try {
+      Files.createSymbolicLink(link, outside);
+    } catch (UnsupportedOperationException | SecurityException e) {
+      org.junit.jupiter.api.Assumptions.abort("Symbolic links are not supported");
+    } catch (java.nio.file.FileSystemException e) {
+      org.junit.jupiter.api.Assumptions.abort("Symbolic links are not permitted");
+    }
+    testUser.setRootFolderPath(root.toString());
+    doCallRealMethod().when(folderService).validatePath(eq(root.toString()), any(Path.class));
+
+    mockMvc
+        .perform(get("/api/files/view").param("path", "linked.pdf"))
+        .andExpect(status().isBadRequest());
+
+    verify(fileService, never()).loadAsResource(any(Path.class));
   }
 
   @Test
   void viewFile_nonExistentFile_returns404() throws Exception {
+    when(fileService.loadAsResource(any(Path.class))).thenCallRealMethod();
+
     mockMvc
         .perform(get("/api/files/view").param("path", "nofile.txt"))
         .andExpect(status().isNotFound());
