@@ -94,6 +94,26 @@ public class FileService {
     Files.deleteIfExists(file);
   }
 
+  public java.util.Map<String, String> deleteFiles(
+      String rootPath, java.util.List<String> relativeFilePaths) {
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
+    for (String relativeFilePath : relativeFilePaths) {
+      try {
+        Path file = Paths.get(rootPath, relativeFilePath).normalize();
+        validatePath(rootPath, file);
+        boolean deleted = Files.deleteIfExists(file);
+        if (deleted) {
+          results.put(relativeFilePath, "SUCCESS");
+        } else {
+          results.put(relativeFilePath, "FAILED: Item not found");
+        }
+      } catch (Exception e) {
+        results.put(relativeFilePath, "FAILED: " + e.getMessage());
+      }
+    }
+    return results;
+  }
+
   /**
    * Renames or moves a file to a new location, overwriting any existing file at the destination.
    *

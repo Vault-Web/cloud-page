@@ -58,11 +58,20 @@ public class FileController {
     trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
   }
 
-  @PatchMapping("/move")
-  public void renameOrMoveFile(@RequestParam String filePath, @RequestParam String newPath)
-      throws IOException {
+  @DeleteMapping("/bulk")
+  public ResponseEntity<java.util.Map<String, String>> deleteFiles(
+      @RequestParam java.util.List<String> filePaths) {
     var user = userService.getCurrentUser();
-    fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, newPath);
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
+    for (String filePath : filePaths) {
+      try {
+        trashService.moveToTrash(user.getRootFolderPath(), user.getId(), filePath);
+        results.put(filePath, "SUCCESS");
+      } catch (Exception e) {
+        results.put(filePath, "FAILED: " + e.getMessage());
+      }
+    }
+    return ResponseEntity.ok(results);
   }
 
   @GetMapping("/download")
@@ -120,5 +129,24 @@ public class FileController {
     String checksum = fileService.calculateChecksum(user.getRootFolderPath(), path);
     Boolean match = (expected == null) ? null : checksum.equalsIgnoreCase(expected);
     return ResponseEntity.ok(new ChecksumDto(FileService.CHECKSUM_ALGORITHM, checksum, match));
+  }
+
+  @PatchMapping("/bulk/move")
+  public ResponseEntity<java.util.Map<String, String>> moveFiles(
+      @RequestParam java.util.List<String> filePaths, @RequestParam String targetPath) {
+    var user = userService.getCurrentUser();
+    java.util.Map<String, String> results = new java.util.LinkedHashMap<>();
+    for (String filePath : filePaths) {
+      try {
+        fileService.renameOrMoveFile(
+            user.getRootFolderPath(),
+            filePath,
+            targetPath + "/" + new java.io.File(filePath).getName());
+        results.put(filePath, "SUCCESS");
+      } catch (Exception e) {
+        results.put(filePath, "FAILED: " + e.getMessage());
+      }
+    }
+    return ResponseEntity.ok(results);
   }
 }
