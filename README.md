@@ -13,6 +13,7 @@ This service is designed to integrate seamlessly with **Vault Web**, sharing its
 - 🔹 **CRUD operations** on files and folders  
 - 🔹 **Secure access via JWT tokens** using Vault Web's master key  
 - 🔹 **Fuzzy file search** with metadata filters (type, MIME, size, modified date) and sort controls  
+- 🔹 **Secure Send** links for expiring, optionally password-protected external downloads
 
 ---
 
@@ -57,6 +58,51 @@ All requests require the existing bearer-token authentication. A frontend using 
 `<video>`, `<audio>`, `<img>`, or embedded PDF elements should expose the endpoint through its
 authenticated same-origin backend/proxy, because those elements cannot attach an arbitrary
 `Authorization` request header.
+
+---
+
+## Secure Send
+
+Secure Send exposes one file through an opaque, expiring external URL. It is separate from
+user-to-user sharing: the recipient does not need an account and cannot browse the owner's files.
+
+All management endpoints require the normal JWT:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/secure-sends` | Create a link for one file |
+| `GET` | `/api/secure-sends` | List the current user's links |
+| `DELETE` | `/api/secure-sends/{id}` | Revoke a link immediately |
+
+Create request:
+
+```json
+{
+  "filePath": "documents/report.pdf",
+  "expiresAt": "2026-07-19T10:00:00Z",
+  "password": "optional password"
+}
+```
+
+The response includes a `url` suitable for the file viewer or chat UI. The raw token is returned
+only as part of this URL and is not stored by the service. Consequently, the listing endpoint does
+not return reusable URLs; if the creation response is lost, revoke the entry and create a new link.
+
+The recipient downloads through the public endpoint:
+
+```http
+GET /api/public/secure-sends/{token}
+X-Secure-Send-Password: optional password
+```
+
+Passwords are sent in a header so they do not appear in URLs or browser history. Unknown, expired,
+revoked, deleted, or moved targets return `404`; an incorrect or missing required password returns
+`401`. A link never accepts a file path and therefore cannot be used to list or select another file.
+
+Secure Send expiry, cleanup, and rate limits are configurable with
+`cloudpage.secure-send.*` and `cloudpage.rate-limit.per-client.secure-send-*` properties. Expiry
+blocks access immediately, but the database record remains for the configured retention period
+before scheduled cleanup removes it.
 
 ---
 

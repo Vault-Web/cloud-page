@@ -38,6 +38,18 @@ public class GlobalExceptionHandler {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
+  @ExceptionHandler(SecureSendUnavailableException.class)
+  public ResponseEntity<String> handleSecureSendUnavailableException(
+      SecureSendUnavailableException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
+  }
+
+  @ExceptionHandler(InvalidSecureSendPasswordException.class)
+  public ResponseEntity<String> handleInvalidSecureSendPasswordException(
+      InvalidSecureSendPasswordException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNAUTHORIZED);
+  }
+
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<String> handleIllegalArgumentException(IllegalArgumentException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);

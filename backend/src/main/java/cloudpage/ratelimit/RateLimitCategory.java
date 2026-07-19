@@ -5,5 +5,7 @@ public enum RateLimitCategory {
   UPLOAD,
   DOWNLOAD,
   LISTING,
-  SCAN
+  SCAN,
+  SECURE_SEND_CREATE,
+  SECURE_SEND_ACCESS
 }

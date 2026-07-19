@@ -60,6 +60,8 @@ public class RateLimitProperties {
     private Policy download = new Policy();
     private Policy listing = new Policy();
     private Policy scan = new Policy();
+    private Policy secureSendCreate = new Policy();
+    private Policy secureSendAccess = new Policy();
 
     static Tier defaults() {
       Tier tier = new Tier();
@@ -67,6 +69,8 @@ public class RateLimitProperties {
       tier.download = new Policy(120, Duration.ofMinutes(1));
       tier.listing = new Policy(240, Duration.ofMinutes(1));
       tier.scan = new Policy(1, Duration.ofMinutes(5));
+      tier.secureSendCreate = new Policy(20, Duration.ofHours(1));
+      tier.secureSendAccess = new Policy(120, Duration.ofMinutes(1));
       return tier;
     }
 
@@ -80,6 +84,8 @@ public class RateLimitProperties {
         case DOWNLOAD -> download;
         case LISTING -> listing;
         case SCAN -> scan;
+        case SECURE_SEND_CREATE -> secureSendCreate;
+        case SECURE_SEND_ACCESS -> secureSendAccess;
       };
     }
 
@@ -113,6 +119,22 @@ public class RateLimitProperties {
 
     public void setScan(Policy scan) {
       this.scan = scan;
+    }
+
+    public Policy getSecureSendCreate() {
+      return secureSendCreate;
+    }
+
+    public void setSecureSendCreate(Policy secureSendCreate) {
+      this.secureSendCreate = secureSendCreate;
+    }
+
+    public Policy getSecureSendAccess() {
+      return secureSendAccess;
+    }
+
+    public void setSecureSendAccess(Policy secureSendAccess) {
+      this.secureSendAccess = secureSendAccess;
     }
   }
 
