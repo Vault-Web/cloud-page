@@ -1,6 +1,7 @@
 package cloudpage.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
@@ -8,11 +9,17 @@ import cloudpage.dto.PageResponseDto;
 import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
 import cloudpage.exceptions.InvalidPathException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -736,5 +743,91 @@ class FolderServiceTest {
         folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0, filter);
 
     assertEquals(2, results.size());
+  }
+
+  // ── folder archive download ──────────────────────────────────────────────
+
+  @Test
+  void writeFolderArchive_normalFolder_containsFile() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("photos"));
+    Files.writeString(folder.resolve("one.txt"), "one");
+
+    Map<String, String> entries = archiveEntries(folder);
+
+    assertEquals("one", entries.get("one.txt"));
+  }
+
+  @Test
+  void writeFolderArchive_nestedAndEmptyFolders_preservesStructure() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("documents"));
+    Path nested = Files.createDirectories(folder.resolve("reports/annual"));
+    Files.writeString(nested.resolve("summary.txt"), "summary");
+    Files.createDirectory(folder.resolve("empty"));
+
+    Map<String, String> entries = archiveEntries(folder);
+
+    assertTrue(entries.containsKey("reports/"));
+    assertTrue(entries.containsKey("reports/annual/"));
+    assertEquals("summary", entries.get("reports/annual/summary.txt"));
+    assertTrue(entries.containsKey("empty/"));
+  }
+
+  @Test
+  void writeFolderArchive_excludesTrashDirectory() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("files"));
+    Files.writeString(folder.resolve("visible.txt"), "visible");
+    Path trash = Files.createDirectory(folder.resolve(TrashService.TRASH_DIR));
+    Files.writeString(trash.resolve("deleted.txt"), "deleted");
+
+    Map<String, String> entries = archiveEntries(folder);
+
+    assertEquals("visible", entries.get("visible.txt"));
+    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(TrashService.TRASH_DIR)));
+  }
+
+  @Test
+  void writeFolderArchive_doesNotFollowSymlinkOutsideRoot() throws IOException {
+    Path root = Files.createDirectory(tempDir.resolve("root"));
+    Path folder = Files.createDirectory(root.resolve("shared"));
+    Path outside = Files.writeString(tempDir.resolve("outside-secret.txt"), "secret");
+    Path link = folder.resolve("linked-secret.txt");
+    try {
+      Files.createSymbolicLink(link, outside);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    folderService.writeFolderArchive(root.toString(), folder, output);
+    Map<String, String> entries = readArchiveEntries(output);
+
+    assertFalse(entries.containsKey("linked-secret.txt"));
+  }
+
+  @Test
+  void resolveArchiveFolder_rejectsTraversalAndTrash() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.resolveArchiveFolder(tempDir.toString(), "../outside"));
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.resolveArchiveFolder(tempDir.toString(), ".trash"));
+  }
+
+  private Map<String, String> archiveEntries(Path folder) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    folderService.writeFolderArchive(tempDir.toString(), folder, output);
+    return readArchiveEntries(output);
+  }
+
+  private Map<String, String> readArchiveEntries(ByteArrayOutputStream output) throws IOException {
+    Map<String, String> entries = new LinkedHashMap<>();
+    try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(output.toByteArray()))) {
+      ZipEntry entry;
+      while ((entry = zip.getNextEntry()) != null) {
+        entries.put(entry.getName(), entry.isDirectory() ? "" : new String(zip.readAllBytes()));
+      }
+    }
+    return entries;
   }
 }

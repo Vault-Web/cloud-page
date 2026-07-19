@@ -8,10 +8,16 @@ import cloudpage.dto.SearchResult;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequiredArgsConstructor
@@ -54,6 +60,30 @@ public class FolderController {
       throws IOException {
     var user = userService.getCurrentUser();
     return folderService.getFolderTree(user.getRootFolderPath(), path, includeChildCounts);
+  }
+
+  @GetMapping("/download")
+  public ResponseEntity<StreamingResponseBody> downloadFolder(
+      @RequestParam(required = false, defaultValue = "") String path) throws IOException {
+    var user = userService.getCurrentUser();
+    Path folder = folderService.resolveArchiveFolder(user.getRootFolderPath(), path);
+    String folderName =
+        folder.getFileName() == null || folder.getFileName().toString().isBlank()
+            ? "files"
+            : folder.getFileName().toString();
+    String archiveName = folderName + ".zip";
+    StreamingResponseBody body =
+        output -> folderService.writeFolderArchive(user.getRootFolderPath(), folder, output);
+
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType("application/zip"))
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment()
+                .filename(archiveName, StandardCharsets.UTF_8)
+                .build()
+                .toString())
+        .body(body);
   }
 
   @PostMapping
