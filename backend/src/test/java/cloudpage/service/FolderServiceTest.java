@@ -814,6 +814,16 @@ class FolderServiceTest {
         () -> folderService.resolveArchiveFolder(tempDir.toString(), ".trash"));
   }
 
+  @Test
+  void resolveArchiveFolder_malformedPath_throwsProjectInvalidPathException() {
+    InvalidPathException exception =
+        assertThrows(
+            InvalidPathException.class,
+            () -> folderService.resolveArchiveFolder(tempDir.toString(), "bad\u0000path"));
+
+    assertTrue(exception.getMessage().startsWith("Invalid folder path:"));
+  }
+
   private Map<String, String> archiveEntries(Path folder) throws IOException {
     ByteArrayOutputStream output = new ByteArrayOutputStream();
     folderService.writeFolderArchive(tempDir.toString(), folder, output);

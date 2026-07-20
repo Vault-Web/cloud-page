@@ -6,6 +6,7 @@ import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -526,10 +527,15 @@ public class FolderService {
    */
   public Path resolveArchiveFolder(String rootPath, String relativeFolderPath) throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path relative =
-        relativeFolderPath == null || relativeFolderPath.isBlank()
-            ? Path.of("")
-            : Path.of(relativeFolderPath);
+    Path relative;
+    try {
+      relative =
+          relativeFolderPath == null || relativeFolderPath.isBlank()
+              ? Path.of("")
+              : Path.of(relativeFolderPath);
+    } catch (java.nio.file.InvalidPathException exception) {
+      throw new InvalidPathException("Invalid folder path: " + relativeFolderPath);
+    }
     boolean addressesTrash = false;
     for (Path part : relative) {
       if (TrashService.TRASH_DIR.equals(part.toString())) {
@@ -587,13 +593,15 @@ public class FolderService {
                 return FileVisitResult.CONTINUE;
               }
 
-              Path fileReal = file.toRealPath().normalize();
-              if (!fileReal.startsWith(rootReal)) {
-                throw new InvalidPathException("Path traversal attempt detected: " + file);
+              try (InputStream input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                Path fileReal = file.toRealPath().normalize();
+                if (!fileReal.startsWith(rootReal)) {
+                  throw new InvalidPathException("Path traversal attempt detected: " + file);
+                }
+                zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, file)));
+                input.transferTo(zip);
+                zip.closeEntry();
               }
-              zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, file)));
-              Files.copy(fileReal, zip);
-              zip.closeEntry();
               return FileVisitResult.CONTINUE;
             }
           });
