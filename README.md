@@ -13,6 +13,7 @@ This service is designed to integrate seamlessly with **Vault Web**, sharing its
 - 🔹 **CRUD operations** on files and folders  
 - 🔹 **Secure access via JWT tokens** using Vault Web's master key  
 - 🔹 **Fuzzy file search** with metadata filters (type, MIME, size, modified date) and sort controls  
+- 🔹 **Streamed folder downloads** as structure-preserving ZIP archives
 - 🔹 **Secure Send** links for expiring, optionally password-protected external downloads
 
 ---
@@ -58,6 +59,18 @@ All requests require the existing bearer-token authentication. A frontend using 
 `<video>`, `<audio>`, `<img>`, or embedded PDF elements should expose the endpoint through its
 authenticated same-origin backend/proxy, because those elements cannot attach an arbitrary
 `Authorization` request header.
+
+---
+
+## Folder archive download
+
+`GET /api/folders/download?path=<user-relative-folder>` streams the selected folder as a ZIP
+archive. The archive keeps nested and empty directories, excludes `.trash`, and does not follow
+symbolic links. Omitting `path` downloads the authenticated user's root folder.
+
+The response uses `Content-Type: application/zip` and an attachment filename based on the selected
+folder. Requests use the existing download rate limit and the same authenticated user-root path
+validation as other file and folder APIs.
 
 ---
 

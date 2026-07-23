@@ -1,5 +1,6 @@
 package cloudpage.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -15,6 +16,7 @@ import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,8 +27,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(FolderController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -96,6 +100,25 @@ class FolderControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("docs"))
         .andExpect(jsonPath("$.lastModifiedAt").value(FIXED_TIME));
+  }
+
+  @Test
+  void downloadFolder_returnsStreamingZipWithArchiveName() throws Exception {
+    Path folder = Files.createDirectory(tempDir.resolve("photos"));
+    when(folderService.resolveArchiveFolder(tempDir.toString(), "photos")).thenReturn(folder);
+
+    MvcResult result =
+        mockMvc
+            .perform(get("/api/folders/download").param("path", "photos"))
+            .andExpect(request().asyncStarted())
+            .andReturn();
+
+    mockMvc
+        .perform(asyncDispatch(result))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType("application/zip"))
+        .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("photos.zip")));
+    verify(folderService).writeFolderArchive(eq(tempDir.toString()), eq(folder), any());
   }
 
   @Test

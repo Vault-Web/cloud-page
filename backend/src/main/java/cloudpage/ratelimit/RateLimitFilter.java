@@ -95,7 +95,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if ("GET".equals(method)
         && ("/api/files/download".equals(path)
             || "/api/files/view".equals(path)
-            || "/api/files/content".equals(path))) {
+            || "/api/files/content".equals(path)
+            || "/api/folders/download".equals(path))) {
       return RateLimitCategory.DOWNLOAD;
     }
     if ("GET".equals(method) && (path.equals("/api/folders") || path.startsWith("/api/folders/"))) {

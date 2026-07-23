@@ -6,10 +6,14 @@ import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -17,6 +21,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
 
@@ -508,6 +514,103 @@ public class FolderService {
   public void validatePath(String rootPath, Path path) throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
     resolvePathWithinRoot(rootReal, path);
+  }
+
+  /**
+   * Resolves and validates a folder before it is used as the source of a streamed archive.
+   *
+   * @param rootPath the authenticated user's root folder
+   * @param relativeFolderPath the folder path relative to the user's root
+   * @return the real path of the requested folder
+   * @throws IOException if the path cannot be resolved
+   * @throws InvalidPathException if the path escapes the root, addresses trash, or is not a folder
+   */
+  public Path resolveArchiveFolder(String rootPath, String relativeFolderPath) throws IOException {
+    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
+    Path relative;
+    try {
+      relative =
+          relativeFolderPath == null || relativeFolderPath.isBlank()
+              ? Path.of("")
+              : Path.of(relativeFolderPath);
+    } catch (java.nio.file.InvalidPathException exception) {
+      throw new InvalidPathException("Invalid folder path: " + relativeFolderPath);
+    }
+    boolean addressesTrash = false;
+    for (Path part : relative) {
+      if (TrashService.TRASH_DIR.equals(part.toString())) {
+        addressesTrash = true;
+        break;
+      }
+    }
+    if (relative.isAbsolute() || addressesTrash) {
+      throw new InvalidPathException("Invalid folder path: " + relativeFolderPath);
+    }
+
+    Path folderReal = resolvePathWithinRoot(rootReal, rootReal.resolve(relative).normalize());
+    if (!Files.isDirectory(folderReal)) {
+      throw new InvalidPathException("Folder does not exist or is not a directory: " + relative);
+    }
+    return folderReal;
+  }
+
+  /**
+   * Streams a folder's contents as ZIP entries without following symbolic links.
+   *
+   * <p>Entry names are relative to the selected folder. Empty directories are retained and any
+   * directory named {@code .trash} is excluded.
+   */
+  public void writeFolderArchive(String rootPath, Path folder, OutputStream output)
+      throws IOException {
+    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
+    Path folderReal = resolvePathWithinRoot(rootReal, folder);
+    if (!Files.isDirectory(folderReal)) {
+      throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
+    }
+
+    try (ZipOutputStream zip = new ZipOutputStream(output)) {
+      Files.walkFileTree(
+          folderReal,
+          new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
+                throws IOException {
+              if (!directory.equals(folderReal)
+                  && TrashService.TRASH_DIR.equals(directory.getFileName().toString())) {
+                return FileVisitResult.SKIP_SUBTREE;
+              }
+              if (!directory.equals(folderReal)) {
+                zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, directory) + "/"));
+                zip.closeEntry();
+              }
+              return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+                throws IOException {
+              if (attrs.isSymbolicLink() || !attrs.isRegularFile()) {
+                return FileVisitResult.CONTINUE;
+              }
+
+              try (InputStream input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                Path fileReal = file.toRealPath().normalize();
+                if (!fileReal.startsWith(rootReal)) {
+                  throw new InvalidPathException("Path traversal attempt detected: " + file);
+                }
+                zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, file)));
+                input.transferTo(zip);
+                zip.closeEntry();
+              }
+              return FileVisitResult.CONTINUE;
+            }
+          });
+      zip.finish();
+    }
+  }
+
+  private String archiveEntryName(Path folder, Path entry) {
+    return folder.relativize(entry).toString().replace('\\', '/');
   }
 
   private void validatePath(Path rootReal, Path path) throws IOException {
