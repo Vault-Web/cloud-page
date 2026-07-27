@@ -227,4 +227,31 @@ class RateLimitFilterTest {
 
     assertNotNull(chain.getRequest());
   }
+
+  @Test
+  void sharedResourceOperationsUseExistingFileOperationBudgets() throws Exception {
+    RateLimitProperties properties = new RateLimitProperties();
+    properties.getPerClient().setUpload(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    properties.getPerClient().setDownload(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    properties.getPerClient().setListing(new RateLimitProperties.Policy(1, Duration.ofMinutes(1)));
+    RateLimitFilter filter = filterWith(properties);
+    authenticate("bob");
+
+    assertSecondRequestIsLimited(filter, "PUT", "/api/shares/share-1/edit", "UPLOAD");
+    assertSecondRequestIsLimited(filter, "GET", "/api/shares/share-1/download-folder", "DOWNLOAD");
+    assertSecondRequestIsLimited(filter, "GET", "/api/shares/share-1/content", "LISTING");
+  }
+
+  private void assertSecondRequestIsLimited(
+      RateLimitFilter filter, String method, String path, String category) throws Exception {
+    filter.doFilter(request(method, path), new MockHttpServletResponse(), new MockFilterChain());
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    filter.doFilter(request(method, path), response, chain);
+
+    assertEquals(429, response.getStatus());
+    assertNull(chain.getRequest());
+    assertTrue(response.getContentAsString().contains("\"category\":\"" + category + "\""));
+  }
 }

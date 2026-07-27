@@ -15,6 +15,7 @@ This service is designed to integrate seamlessly with **Vault Web**, sharing its
 - 🔹 **Fuzzy file search** with metadata filters (type, MIME, size, modified date) and sort controls  
 - 🔹 **Streamed folder downloads** as structure-preserving ZIP archives
 - 🔹 **Secure Send** links for expiring, optionally password-protected external downloads
+- 🔹 **User-to-user sharing** for selected files and folders with explicit permissions
 
 ---
 
@@ -116,6 +117,47 @@ Secure Send expiry, cleanup, and rate limits are configurable with
 `cloudpage.secure-send.*` and `cloudpage.rate-limit.per-client.secure-send-*` properties. Expiry
 blocks access immediately, but the database record remains for the configured retention period
 before scheduled cleanup removes it.
+
+---
+
+## User-to-user sharing
+
+Registered users can grant another registered user access to one file or folder without exposing
+the rest of their storage. This authenticated flow is separate from Secure Send. Shares support
+`VIEW`, `DOWNLOAD`, and `EDIT` permissions; permissions are checked again on every shared
+operation.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/shares` | Share an owned file or folder |
+| `GET` | `/api/shares` | List shares created by the current user, including revoked shares |
+| `GET` | `/api/shares/shared-with-me` | List active shares received by the current user |
+| `DELETE` | `/api/shares/{id}` | Revoke an owned share immediately |
+| `GET` | `/api/shares/{id}/content?path=<relative-path>` | List a shared folder or nested folder; requires `VIEW` |
+| `GET` | `/api/shares/{id}/view?path=<relative-path>` | View a shared file or nested file; requires `VIEW` |
+| `GET` | `/api/shares/{id}/download?path=<relative-path>` | Download a shared file or nested file; requires `DOWNLOAD` |
+| `GET` | `/api/shares/{id}/download-folder?path=<relative-path>` | Download a shared folder or nested folder as ZIP; requires `DOWNLOAD` |
+| `PUT` | `/api/shares/{id}/edit?path=<relative-path>` | Replace a shared file or nested file using multipart field `file`; requires `EDIT` |
+
+Create request:
+
+```json
+{
+  "path": "projects/website",
+  "recipientUsername": "bob",
+  "permissions": ["VIEW", "DOWNLOAD", "EDIT"]
+}
+```
+
+The resource type is inferred from the owned path. A recipient uses the returned share ID and, for
+a folder share, may supply only paths relative to that shared folder. Omitting `path` addresses the
+shared file or folder itself. Absolute paths, parent traversal outside the shared folder, symbolic
+link escapes, and `.trash` paths are rejected. Moving or deleting the original resource makes the
+share unavailable; revocation removes recipient access immediately. `EDIT` replaces the contents
+of an existing shared file and cannot create files or change anything outside the shared boundary.
+It also enforces the owner's storage quota. Creating the same active share again reuses that share
+and updates its permissions instead of adding a duplicate. Shared browsing, downloads, and edits
+use the existing listing, download, and upload rate-limit budgets respectively.
 
 ---
 

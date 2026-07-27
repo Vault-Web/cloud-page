@@ -257,6 +257,23 @@ public class FileService {
     return new FileResource(resource, etag, lastModified);
   }
 
+  /** Ensures replacing one existing file would not exceed the owner's storage quota. */
+  public void validateReplacementWithinQuota(
+      String rootPath, long existingFileSize, long replacementSize, Long quotaMb)
+      throws IOException {
+    if (quotaMb == null) {
+      return;
+    }
+    long currentSize = calculateDirectorySize(Paths.get(rootPath));
+    long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
+    long projectedSize = Math.subtractExact(currentSize, existingFileSize);
+    projectedSize = Math.addExact(projectedSize, replacementSize);
+    if (projectedSize > quotaBytes) {
+      throw new IllegalArgumentException(
+          "Edit rejected: storage limit of " + quotaMb + " MB would be exceeded");
+    }
+  }
+
   /**
    * Calculates the total size of a directory by recursively summing the sizes of all regular files
    * it contains. Files whose size cannot be read are skipped.

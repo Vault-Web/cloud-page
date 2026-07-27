@@ -23,6 +23,11 @@ public class GlobalExceptionHandler {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNAUTHORIZED);
   }
 
+  @ExceptionHandler(ShareAccessDeniedException.class)
+  public ResponseEntity<String> handleShareAccessDeniedException(ShareAccessDeniedException ex) {
+    return new ResponseEntity<>(ex.getMessage(), HttpStatus.FORBIDDEN);
+  }
+
   @ExceptionHandler(InvalidPathException.class)
   public ResponseEntity<String> handleInvalidPathException(InvalidPathException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);

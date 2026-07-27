@@ -89,6 +89,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if ("POST".equals(method) && "/api/files/upload".equals(path)) {
       return RateLimitCategory.UPLOAD;
     }
+    if ("PUT".equals(method) && path.matches("/api/shares/[^/]+/edit")) {
+      return RateLimitCategory.UPLOAD;
+    }
     if ("POST".equals(method) && "/api/files/scan".equals(path)) {
       return RateLimitCategory.SCAN;
     }
@@ -96,10 +99,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         && ("/api/files/download".equals(path)
             || "/api/files/view".equals(path)
             || "/api/files/content".equals(path)
-            || "/api/folders/download".equals(path))) {
+            || "/api/folders/download".equals(path)
+            || path.matches("/api/shares/[^/]+/(view|download|download-folder)"))) {
       return RateLimitCategory.DOWNLOAD;
     }
     if ("GET".equals(method) && (path.equals("/api/folders") || path.startsWith("/api/folders/"))) {
+      return RateLimitCategory.LISTING;
+    }
+    if ("GET".equals(method) && path.matches("/api/shares/[^/]+/content")) {
       return RateLimitCategory.LISTING;
     }
     if ("POST".equals(method) && "/api/secure-sends".equals(path)) {
