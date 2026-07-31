@@ -422,6 +422,36 @@ class FolderServiceTest {
   }
 
   @Test
+  void getFolderContentPage_directorySizeResolvedForReturnedPage() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("folder1"));
+    Files.writeString(folder.resolve("nested.txt"), "12345");
+    Files.writeString(folder.resolve("nested2.txt"), "123");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    FolderContentItemDto directory =
+        result.getContent().stream()
+            .filter(FolderContentItemDto::isDirectory)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(8, directory.getSize());
+  }
+
+  @Test
+  void getFolderContentPage_mimeTypeResolvedForReturnedPage() throws IOException {
+    Path file = tempDir.resolve("note.txt");
+    Files.writeString(file, "content");
+    String expected = Files.probeContentType(file);
+    assumeTrue(expected != null);
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    assertEquals(expected, result.getContent().get(0).getMimeType());
+  }
+
+  @Test
   void getFolderContentPage_sortByNameAscending_returnsSortedItems() throws IOException {
     Files.writeString(tempDir.resolve("zebra.txt"), "z");
     Files.writeString(tempDir.resolve("apple.txt"), "a");
