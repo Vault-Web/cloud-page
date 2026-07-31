@@ -40,7 +40,8 @@ public class FolderController {
       @RequestParam(required = false, defaultValue = "") String path,
       @RequestParam int page,
       @RequestParam int size,
-      @RequestParam(required = false) String sort)
+      @RequestParam(required = false) String sort,
+      @RequestParam(required = false, defaultValue = "true") boolean includeDirectorySizes)
       throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
@@ -50,7 +51,15 @@ public class FolderController {
     }
 
     var user = userService.getCurrentUser();
-    return folderService.getFolderContentPage(user.getRootFolderPath(), path, page, size, sort);
+    return folderService.getFolderContentPage(
+        user.getRootFolderPath(), path, page, size, sort, includeDirectorySizes);
+  }
+
+  @GetMapping("/size")
+  public long getFolderSize(@RequestParam(required = false, defaultValue = "") String path)
+      throws IOException {
+    var user = userService.getCurrentUser();
+    return folderService.getDirectorySize(user.getRootFolderPath(), path);
   }
 
   @GetMapping("/path")

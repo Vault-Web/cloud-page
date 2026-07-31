@@ -241,6 +241,17 @@ public class FolderService {
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
       String rootPath, String relativePath, int page, int size, String sort) throws IOException {
+    return getFolderContentPage(rootPath, relativePath, page, size, sort, true);
+  }
+
+  public PageResponseDto<FolderContentItemDto> getFolderContentPage(
+      String rootPath,
+      String relativePath,
+      int page,
+      int size,
+      String sort,
+      boolean includeDirectorySizes)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -326,17 +337,32 @@ public class FolderService {
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
-    resolveDeferredAttributes(folder, pageContent);
+    resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
   }
 
-  private void resolveDeferredAttributes(Path folder, List<FolderContentItemDto> items)
+  public long getDirectorySize(String rootPath, String relativePath) throws IOException {
+    Path folder =
+        (relativePath == null || relativePath.isBlank())
+            ? Paths.get(rootPath)
+            : Paths.get(rootPath, relativePath).normalize();
+
+    validatePath(rootPath, folder);
+    if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+      throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
+    }
+
+    return calculateDirectorySize(folder);
+  }
+
+  private void resolveDeferredAttributes(
+      Path folder, List<FolderContentItemDto> items, boolean resolveDirectorySizes)
       throws IOException {
     for (FolderContentItemDto item : items) {
       Path path = folder.resolve(item.getName());
       if (item.isDirectory()) {
-        if (item.getSize() == DEFERRED_SIZE) {
+        if (resolveDirectorySizes && item.getSize() == DEFERRED_SIZE) {
           item.setSize(calculateDirectorySize(path));
         }
       } else {
