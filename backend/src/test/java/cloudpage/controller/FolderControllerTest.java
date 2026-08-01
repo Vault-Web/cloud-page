@@ -258,7 +258,7 @@ class FolderControllerTest {
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
-            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null)))
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(true)))
         .thenReturn(pageResponse);
 
     mockMvc
@@ -275,7 +275,7 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
-        .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null));
+        .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(true));
   }
 
   @Test
@@ -287,7 +287,7 @@ class FolderControllerTest {
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 1L, 1, 0);
 
     when(folderService.getFolderContentPage(
-            eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null)))
+            eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null), eq(true)))
         .thenReturn(pageResponse);
 
     mockMvc
@@ -302,7 +302,8 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.content[0].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
-        .getFolderContentPage(eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null));
+        .getFolderContentPage(
+            eq(tempDir.toString()), eq("docs"), eq(0), eq(10), eq(null), eq(true));
   }
 
   @Test
@@ -316,7 +317,7 @@ class FolderControllerTest {
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 2L, 1, 0);
 
     when(folderService.getFolderContentPage(
-            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc")))
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc"), eq(true)))
         .thenReturn(pageResponse);
 
     mockMvc
@@ -332,7 +333,8 @@ class FolderControllerTest {
         .andExpect(jsonPath("$.content[1].lastModifiedAt").value(FIXED_TIME));
 
     verify(folderService)
-        .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc"));
+        .getFolderContentPage(
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq("name,asc"), eq(true));
   }
 
   @Test
@@ -373,7 +375,7 @@ class FolderControllerTest {
   @Test
   void getFolderContent_invalidPath_returns400() throws Exception {
     when(folderService.getFolderContentPage(
-            eq(tempDir.toString()), eq("../../evil"), eq(0), eq(10), eq(null)))
+            eq(tempDir.toString()), eq("../../evil"), eq(0), eq(10), eq(null), eq(true)))
         .thenThrow(new InvalidPathException("Path traversal attempt detected"));
 
     mockMvc
@@ -386,12 +388,43 @@ class FolderControllerTest {
   }
 
   @Test
+  void getFolderContent_excludeDirectorySizes_passesFlagToService() throws Exception {
+    PageResponseDto<FolderContentItemDto> emptyPage =
+        new PageResponseDto<>(Collections.emptyList(), 0L, 0, 0);
+
+    when(folderService.getFolderContentPage(
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(false)))
+        .thenReturn(emptyPage);
+
+    mockMvc
+        .perform(
+            get("/api/folders/content")
+                .param("page", "0")
+                .param("size", "10")
+                .param("includeDirectorySizes", "false"))
+        .andExpect(status().isOk());
+
+    verify(folderService)
+        .getFolderContentPage(eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(false));
+  }
+
+  @Test
+  void getFolderSize_validPath_returnsSize() throws Exception {
+    when(folderService.getDirectorySize(eq(tempDir.toString()), eq("docs"))).thenReturn(4096L);
+
+    mockMvc
+        .perform(get("/api/folders/size").param("path", "docs"))
+        .andExpect(status().isOk())
+        .andExpect(content().string("4096"));
+  }
+
+  @Test
   void getFolderContent_emptyFolder_returnsEmptyPage() throws Exception {
     PageResponseDto<FolderContentItemDto> emptyPage =
         new PageResponseDto<>(Collections.emptyList(), 0L, 0, 0);
 
     when(folderService.getFolderContentPage(
-            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null)))
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(true)))
         .thenReturn(emptyPage);
 
     mockMvc
@@ -411,7 +444,8 @@ class FolderControllerTest {
                 "file3.txt", "file3.txt", false, 300L, "text/plain", FIXED_TIME));
     PageResponseDto<FolderContentItemDto> pageResponse = new PageResponseDto<>(content, 3L, 2, 1);
 
-    when(folderService.getFolderContentPage(eq(tempDir.toString()), eq(""), eq(1), eq(2), eq(null)))
+    when(folderService.getFolderContentPage(
+            eq(tempDir.toString()), eq(""), eq(1), eq(2), eq(null), eq(true)))
         .thenReturn(pageResponse);
 
     mockMvc

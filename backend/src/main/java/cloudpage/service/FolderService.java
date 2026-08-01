@@ -29,6 +29,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class FolderService {
 
+  private static final long DEFERRED_SIZE = -1L;
+
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
 
   /**
@@ -239,6 +241,17 @@ public class FolderService {
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
       String rootPath, String relativePath, int page, int size, String sort) throws IOException {
+    return getFolderContentPage(rootPath, relativePath, page, size, sort, true);
+  }
+
+  public PageResponseDto<FolderContentItemDto> getFolderContentPage(
+      String rootPath,
+      String relativePath,
+      int page,
+      int size,
+      String sort,
+      boolean includeDirectorySizes)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -259,6 +272,7 @@ public class FolderService {
     // Resolve root path once for relative path calculation and path validation
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
 
+    boolean eagerSizes = sortsBySize(sort);
     List<FolderContentItemDto> items = new ArrayList<>();
 
     try (var stream = Files.list(folder)) {
@@ -274,7 +288,6 @@ public class FolderService {
 
                       boolean isDirectory = Files.isDirectory(path);
                       long sizeValue = 0L;
-                      String mimeType = null;
                       long lastModifiedAt;
 
                       try {
@@ -285,9 +298,10 @@ public class FolderService {
 
                         if (!isDirectory) {
                           sizeValue = attrs.size();
-                          mimeType = Files.probeContentType(path);
-                        } else {
+                        } else if (eagerSizes) {
                           sizeValue = calculateDirectorySize(path);
+                        } else {
+                          sizeValue = DEFERRED_SIZE;
                         }
                       } catch (IOException e) {
                         throw new FileAccessException(
@@ -302,7 +316,7 @@ public class FolderService {
                           itemRelativePath,
                           isDirectory,
                           sizeValue,
-                          mimeType,
+                          null,
                           lastModifiedAt);
                     } catch (IOException e) {
                       throw new InvalidPathException(
@@ -323,7 +337,42 @@ public class FolderService {
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
+    resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
+
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
+  }
+
+  public long getDirectorySize(String rootPath, String relativePath) throws IOException {
+    Path folder =
+        (relativePath == null || relativePath.isBlank())
+            ? Paths.get(rootPath)
+            : Paths.get(rootPath, relativePath).normalize();
+
+    validatePath(rootPath, folder);
+    if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+      throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
+    }
+
+    return calculateDirectorySize(folder);
+  }
+
+  private void resolveDeferredAttributes(
+      Path folder, List<FolderContentItemDto> items, boolean resolveDirectorySizes)
+      throws IOException {
+    for (FolderContentItemDto item : items) {
+      Path path = folder.resolve(item.getName());
+      if (item.isDirectory()) {
+        if (resolveDirectorySizes && item.getSize() == DEFERRED_SIZE) {
+          item.setSize(calculateDirectorySize(path));
+        }
+      } else {
+        item.setMimeType(Files.probeContentType(path));
+      }
+    }
+  }
+
+  private boolean sortsBySize(String sort) {
+    return sort != null && !sort.isBlank() && "size".equals(sort.split(",")[0]);
   }
 
   /**

@@ -422,6 +422,85 @@ class FolderServiceTest {
   }
 
   @Test
+  void getFolderContentPage_directorySizeResolvedForReturnedPage() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("folder1"));
+    Files.writeString(folder.resolve("nested.txt"), "12345");
+    Files.writeString(folder.resolve("nested2.txt"), "123");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    FolderContentItemDto directory =
+        result.getContent().stream()
+            .filter(FolderContentItemDto::isDirectory)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(8, directory.getSize());
+  }
+
+  @Test
+  void getFolderContentPage_directorySizesExcluded_leavesSizeUnresolved() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("folder1"));
+    Files.writeString(folder.resolve("nested.txt"), "12345");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null, false);
+
+    FolderContentItemDto directory =
+        result.getContent().stream()
+            .filter(FolderContentItemDto::isDirectory)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(-1L, directory.getSize());
+  }
+
+  @Test
+  void getFolderContentPage_sortBySizeOverridesExclusion() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("folder1"));
+    Files.writeString(folder.resolve("nested.txt"), "12345");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, "size", false);
+
+    FolderContentItemDto directory =
+        result.getContent().stream()
+            .filter(FolderContentItemDto::isDirectory)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(5, directory.getSize());
+  }
+
+  @Test
+  void getDirectorySize_nestedFiles_returnsCumulativeSize() throws IOException {
+    Path folder = Files.createDirectory(tempDir.resolve("folder1"));
+    Path nested = Files.createDirectory(folder.resolve("nested"));
+    Files.writeString(folder.resolve("a.txt"), "12345");
+    Files.writeString(nested.resolve("b.txt"), "123");
+
+    assertEquals(8, folderService.getDirectorySize(tempDir.toString(), "folder1"));
+  }
+
+  @Test
+  void getDirectorySize_pathTraversal_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.getDirectorySize(tempDir.toString(), "../../etc"));
+  }
+
+  @Test
+  void getFolderContentPage_mimeTypeResolvedForReturnedPage() throws IOException {
+    Path file = tempDir.resolve("note.txt");
+    Files.writeString(file, "content");
+    String expected = Files.probeContentType(file);
+    assumeTrue(expected != null);
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    assertEquals(expected, result.getContent().get(0).getMimeType());
+  }
+
+  @Test
   void getFolderContentPage_sortByNameAscending_returnsSortedItems() throws IOException {
     Files.writeString(tempDir.resolve("zebra.txt"), "z");
     Files.writeString(tempDir.resolve("apple.txt"), "a");
