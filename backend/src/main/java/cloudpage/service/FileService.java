@@ -49,10 +49,12 @@ public class FileService {
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
     }
-    long newFileSize = file.getSize();
-    long currentSize = calculateDirectorySize(Paths.get(rootPath));
-
+    // Only measure the whole storage when a quota is actually enforced. The walk
+    // is O(all files) and, on a large tree over a spinning disk, slow enough to
+    // time the request out — so it must not run when there is no quota to check.
     if (quotaMb != null) {
+      long newFileSize = file.getSize();
+      long currentSize = calculateDirectorySize(Paths.get(rootPath));
       long quotaBytes = quotaMb * 1024 * 1024;
 
       if (currentSize + newFileSize > quotaBytes) {
