@@ -23,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -68,6 +69,12 @@ public class ResourceShareController {
     return ResponseEntity.noContent().build();
   }
 
+  @DeleteMapping("/{id}/leave")
+  public ResponseEntity<Void> leave(@PathVariable String id) {
+    shareService.leave(userService.getCurrentUser().getId(), id);
+    return ResponseEntity.noContent().build();
+  }
+
   @GetMapping("/{id}/view")
   public ResponseEntity<Resource> view(
       @PathVariable String id, @RequestParam(required = false, defaultValue = "") String path)
@@ -100,6 +107,43 @@ public class ResourceShareController {
       @RequestParam MultipartFile file)
       throws IOException {
     shareService.editFile(id, userService.getCurrentUser(), path, file);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/{id}/upload")
+  public ResponseEntity<Void> upload(
+      @PathVariable String id,
+      @RequestParam(required = false, defaultValue = "") String path,
+      @RequestParam MultipartFile file)
+      throws IOException {
+    shareService.uploadToShare(id, userService.getCurrentUser(), path, file);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/{id}/folder")
+  public ResponseEntity<Void> createFolder(
+      @PathVariable String id,
+      @RequestParam(required = false, defaultValue = "") String path,
+      @RequestParam String name)
+      throws IOException {
+    shareService.createFolderInShare(id, userService.getCurrentUser(), path, name);
+    return ResponseEntity.noContent().build();
+  }
+
+  @DeleteMapping("/{id}/entry")
+  public ResponseEntity<Void> deleteEntry(@PathVariable String id, @RequestParam String path)
+      throws IOException {
+    shareService.deleteInShare(id, userService.getCurrentUser(), path);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PatchMapping("/{id}/rename")
+  public ResponseEntity<Void> rename(
+      @PathVariable String id,
+      @RequestParam(required = false, defaultValue = "") String path,
+      @RequestParam String newName)
+      throws IOException {
+    shareService.renameInShare(id, userService.getCurrentUser(), path, newName);
     return ResponseEntity.noContent().build();
   }
 

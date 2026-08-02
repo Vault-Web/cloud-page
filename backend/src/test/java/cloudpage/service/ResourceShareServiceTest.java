@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -232,6 +233,72 @@ class ResourceShareServiceTest {
     assertThrows(
         ResourceNotFoundException.class,
         () -> service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD));
+  }
+
+  @Test
+  void sharedResourceItselfCannotBeDeletedOrRenamedThroughChildOperations() throws Exception {
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    Path nested = Files.createDirectory(project.resolve("nested"));
+    Files.writeString(nested.resolve("notes.txt"), "notes");
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
+    share.setPermissions(
+        Set.of(SharePermission.VIEW, SharePermission.DOWNLOAD, SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    // Every spelling that normalises back to the share root, not just the empty one.
+    for (String selfPath : new String[] {"", ".", "nested/.."}) {
+      assertThrows(
+          ShareAccessDeniedException.class,
+          () -> service.deleteInShare("share-1", recipient, selfPath));
+      assertThrows(
+          ShareAccessDeniedException.class,
+          () -> service.renameInShare("share-1", recipient, selfPath, "renamed"));
+    }
+    assertTrue(Files.isDirectory(project), "the owner's shared folder must survive");
+
+    // The guard must not block ordinary child operations.
+    service.deleteInShare("share-1", recipient, "nested/notes.txt");
+    assertTrue(Files.notExists(nested.resolve("notes.txt")));
+  }
+
+  @Test
+  void newNamesInsideAShareMustBeASingleComponent() throws Exception {
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
+    share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    // A name is joined onto a directory inside the share; separators would place it
+    // outside the share while still inside the owner's root, where FolderService
+    // would happily create it.
+    for (String escaping : new String[] {"../escape", "nested/deep", "..", "."}) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> service.createFolderInShare("share-1", recipient, "", escaping));
+    }
+    assertTrue(Files.notExists(ownerRoot.resolve("escape")));
+
+    // Dots inside a name are legitimate and must still be accepted.
+    service.createFolderInShare("share-1", recipient, "", "notes..v2");
+    assertTrue(Files.isDirectory(project.resolve("notes..v2")));
+  }
+
+  @Test
+  void receivedListHidesSharesWhoseTargetIsGoneAndLooksEachOwnerUpOnce() throws Exception {
+    Files.writeString(ownerRoot.resolve("kept.txt"), "kept");
+    ResourceShare kept = share("share-kept", "kept.txt", SharedResourceType.FILE);
+    ResourceShare removed = share("share-removed", "deleted.txt", SharedResourceType.FILE);
+    when(shareRepository.findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc("recipient-1"))
+        .thenReturn(List.of(kept, removed));
+
+    var received = service.listReceived(recipient);
+
+    assertEquals(1, received.size());
+    assertEquals("share-kept", received.get(0).id());
+    // Two shares from the same owner must not cost four user lookups.
+    verify(userRepository, times(1)).findById("owner-1");
   }
 
   private ResourceShare share(String id, String path, SharedResourceType type) {

@@ -14,6 +14,7 @@ import cloudpage.dto.CreatedSecureSend;
 import cloudpage.exceptions.InvalidSecureSendPasswordException;
 import cloudpage.exceptions.SecureSendUnavailableException;
 import cloudpage.model.SecureSend;
+import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.SecureSendRepository;
 import cloudpage.repository.UserRepository;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,7 +90,7 @@ class SecureSendServiceTest {
         .thenReturn(Optional.of(created.secureSend()));
     when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
 
-    var resolved = service.resolve(created.token(), null);
+    var resolved = service.resolve(created.token(), null, "");
 
     assertEquals(target.toRealPath(), resolved.getPath());
     assertTrue(resolved.getFileResource().getResource().exists());
@@ -103,9 +105,10 @@ class SecureSendServiceTest {
         .thenReturn(Optional.of(created.secureSend()));
 
     assertThrows(
-        InvalidSecureSendPasswordException.class, () -> service.resolve(created.token(), null));
+        InvalidSecureSendPasswordException.class, () -> service.resolve(created.token(), null, ""));
     assertThrows(
-        InvalidSecureSendPasswordException.class, () -> service.resolve(created.token(), "wrong"));
+        InvalidSecureSendPasswordException.class,
+        () -> service.resolve(created.token(), "wrong", ""));
   }
 
   @Test
@@ -116,14 +119,14 @@ class SecureSendServiceTest {
     when(secureSendRepository.findByTokenHash(expired.secureSend().getTokenHash()))
         .thenReturn(Optional.of(expired.secureSend()));
     assertThrows(
-        SecureSendUnavailableException.class, () -> service.resolve(expired.token(), null));
+        SecureSendUnavailableException.class, () -> service.resolve(expired.token(), null, ""));
 
     CreatedSecureSend revoked = service.create(owner, "doc.txt", NOW.plusSeconds(60), null);
     revoked.secureSend().setRevokedAt(NOW);
     when(secureSendRepository.findByTokenHash(revoked.secureSend().getTokenHash()))
         .thenReturn(Optional.of(revoked.secureSend()));
     assertThrows(
-        SecureSendUnavailableException.class, () -> service.resolve(revoked.token(), null));
+        SecureSendUnavailableException.class, () -> service.resolve(revoked.token(), null, ""));
   }
 
   @Test
@@ -138,6 +141,107 @@ class SecureSendServiceTest {
     assertEquals(NOW, send.getRevokedAt());
     verify(secureSendRepository).save(send);
     assertFalse(service.list("different-owner").stream().findAny().isPresent());
+  }
+
+  @Test
+  void folderLinkListsItsContentsAndNavigatesIntoSubfolders() throws Exception {
+    Path project = Files.createDirectory(tempDir.resolve("project"));
+    Files.writeString(project.resolve("readme.md"), "readme");
+    Path images = Files.createDirectory(project.resolve("images"));
+    Files.writeString(images.resolve("photo.jpg"), "jpeg-bytes");
+    Files.writeString(tempDir.resolve("private.txt"), "private");
+    CreatedSecureSend created = service.create(owner, "project", NOW.plusSeconds(3600), null);
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    assertEquals(SharedResourceType.FOLDER, created.secureSend().getResourceType());
+    assertEquals(
+        SharedResourceType.FOLDER,
+        service.describe(created.token()).resourceType(),
+        "the landing page needs to know it is browsing a folder");
+
+    var top = service.listFolder(created.token(), null, "");
+    assertEquals(List.of("images", "readme.md"), top.stream().map(item -> item.getName()).toList());
+    assertTrue(top.get(0).isDirectory());
+    assertEquals("images", top.get(0).getPath());
+
+    var nested = service.listFolder(created.token(), null, "images");
+    assertEquals(1, nested.size());
+    // Paths stay relative to the share so the recipient can pass them straight back.
+    assertEquals("images/photo.jpg", nested.get(0).getPath());
+    assertEquals(
+        images.resolve("photo.jpg").toRealPath(),
+        service.resolve(created.token(), null, "images/photo.jpg").getPath());
+  }
+
+  @Test
+  void folderLinkConfinesEveryPathToTheSharedFolder() throws Exception {
+    Path project = Files.createDirectory(tempDir.resolve("project"));
+    Files.writeString(project.resolve("inside.txt"), "inside");
+    Files.writeString(tempDir.resolve("private.txt"), "private");
+    CreatedSecureSend created = service.create(owner, "project", NOW.plusSeconds(3600), null);
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    for (String escaping :
+        List.of("../private.txt", "../", "/etc/passwd", "images/../../private.txt")) {
+      assertThrows(
+          SecureSendUnavailableException.class,
+          () -> service.resolve(created.token(), null, escaping),
+          escaping + " must not resolve through a folder link");
+    }
+    // The archive endpoint is confined the same way.
+    assertThrows(
+        SecureSendUnavailableException.class,
+        () -> service.resolveFolderArchive(created.token(), null, ".."));
+    assertEquals(
+        project.toRealPath(), service.resolveFolderArchive(created.token(), null, "").folder());
+  }
+
+  @Test
+  void folderLinkStillHonoursThePasswordOnEveryOperation() throws Exception {
+    Path project = Files.createDirectory(tempDir.resolve("project"));
+    Files.writeString(project.resolve("inside.txt"), "inside");
+    CreatedSecureSend created = service.create(owner, "project", NOW.plusSeconds(3600), "correct");
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+
+    assertThrows(
+        InvalidSecureSendPasswordException.class,
+        () -> service.listFolder(created.token(), null, ""));
+    assertThrows(
+        InvalidSecureSendPasswordException.class,
+        () -> service.resolve(created.token(), "wrong", "inside.txt"));
+    assertThrows(
+        InvalidSecureSendPasswordException.class,
+        () -> service.resolveFolderArchive(created.token(), "wrong", ""));
+
+    // Describing the link needs no password; it is what the landing page shows first.
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+    assertTrue(service.describe(created.token()).passwordProtected());
+  }
+
+  @Test
+  void fileLinkAcceptsNoChildPathAndTheTrashCannotBeShared() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+    Path trash = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Files.writeString(trash.resolve("deleted.txt"), "deleted");
+    CreatedSecureSend created = service.create(owner, "report.pdf", NOW.plusSeconds(3600), null);
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    assertEquals(SharedResourceType.FILE, created.secureSend().getResourceType());
+    assertThrows(
+        SecureSendUnavailableException.class,
+        () -> service.resolve(created.token(), null, "anything.txt"));
+    assertThrows(
+        SecureSendUnavailableException.class, () -> service.listFolder(created.token(), null, ""));
+    assertThrows(
+        RuntimeException.class,
+        () -> service.create(owner, TrashService.TRASH_DIR, NOW.plusSeconds(60), null));
   }
 
   @Test

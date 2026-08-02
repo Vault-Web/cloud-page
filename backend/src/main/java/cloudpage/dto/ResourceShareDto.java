@@ -10,6 +10,7 @@ public record ResourceShareDto(
     String ownerUsername,
     String recipientUsername,
     String displayName,
+    String relativePath,
     SharedResourceType resourceType,
     Set<SharePermission> permissions,
     Instant createdAt,

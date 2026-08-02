@@ -1,5 +1,6 @@
 package cloudpage.dto;
 
+import cloudpage.model.SharedResourceType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
@@ -13,6 +14,7 @@ public class SecureSendDto {
   private String id;
   private String url;
   private String fileName;
+  private SharedResourceType resourceType;
   private Instant createdAt;
   private Instant expiresAt;
   private boolean passwordProtected;

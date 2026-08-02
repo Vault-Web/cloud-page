@@ -1,27 +1,34 @@
 package cloudpage.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import cloudpage.dto.CreatedSecureSend;
 import cloudpage.dto.FileResource;
+import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.SecureSendDto;
 import cloudpage.dto.SecureSendResource;
+import cloudpage.dto.SharedFolderResource;
 import cloudpage.exceptions.InvalidSecureSendPasswordException;
 import cloudpage.exceptions.SecureSendUnavailableException;
 import cloudpage.model.SecureSend;
+import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
+import cloudpage.service.FolderService;
 import cloudpage.service.SecureSendService;
 import cloudpage.service.UserService;
 import java.nio.file.Files;
@@ -38,6 +45,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(SecureSendController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -47,6 +55,7 @@ class SecureSendControllerTest {
 
   @MockitoBean private SecureSendService secureSendService;
   @MockitoBean private UserService userService;
+  @MockitoBean private FolderService folderService;
   @MockitoBean private JwtAuthFilter jwtAuthFilter;
   @MockitoBean private JwtUtil jwtUtil;
   @MockitoBean private RateLimitFilter rateLimitFilter;
@@ -78,6 +87,7 @@ class SecureSendControllerTest {
                     "send-1",
                     invocation.getArgument(1),
                     "report.pdf",
+                    SharedResourceType.FILE,
                     send.getCreatedAt(),
                     send.getExpiresAt(),
                     false,
@@ -96,7 +106,7 @@ class SecureSendControllerTest {
                     """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value("send-1"))
-        .andExpect(jsonPath("$.url").value("http://localhost/api/public/secure-sends/raw-token"))
+        .andExpect(jsonPath("$.url").value("http://localhost/s/raw-token"))
         .andExpect(
             content()
                 .string(
@@ -128,7 +138,7 @@ class SecureSendControllerTest {
   void publicDownloadReturnsResourceHeaders() throws Exception {
     Path file = Files.writeString(tempDir.resolve("report.txt"), "report");
     FileResource fileResource = new FileResource(new UrlResource(file.toUri()), "\"6-123\"", 123L);
-    when(secureSendService.resolve("token", "secret"))
+    when(secureSendService.resolve("token", "secret", ""))
         .thenReturn(new SecureSendResource(file, fileResource));
 
     mockMvc
@@ -142,7 +152,7 @@ class SecureSendControllerTest {
 
   @Test
   void unavailablePublicLinkReturns404() throws Exception {
-    when(secureSendService.resolve("missing", null))
+    when(secureSendService.resolve("missing", null, ""))
         .thenThrow(new SecureSendUnavailableException());
 
     mockMvc
@@ -153,7 +163,7 @@ class SecureSendControllerTest {
 
   @Test
   void incorrectPasswordReturns401() throws Exception {
-    when(secureSendService.resolve("token", "wrong"))
+    when(secureSendService.resolve("token", "wrong", ""))
         .thenThrow(new InvalidSecureSendPasswordException());
 
     mockMvc
@@ -161,5 +171,65 @@ class SecureSendControllerTest {
             get("/api/public/secure-sends/token")
                 .header(SecureSendController.PASSWORD_HEADER, "wrong"))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void folderLinkListsTheRequestedSubPath() throws Exception {
+    when(secureSendService.listFolder("token", "secret", "images"))
+        .thenReturn(
+            List.of(
+                new FolderContentItemDto(
+                    "photo.jpg", "images/photo.jpg", false, 42L, "image/jpeg", 1L)));
+
+    mockMvc
+        .perform(
+            get("/api/public/secure-sends/token/content")
+                .param("path", "images")
+                .header(SecureSendController.PASSWORD_HEADER, "secret"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].name").value("photo.jpg"))
+        .andExpect(jsonPath("$[0].path").value("images/photo.jpg"))
+        .andExpect(jsonPath("$[0].directory").value(false));
+  }
+
+  @Test
+  void folderLinkIsDownloadableAsZipNamedAfterTheFolder() throws Exception {
+    Path folder = Files.createDirectory(tempDir.resolve("project"));
+    when(secureSendService.resolveFolderArchive("token", null, ""))
+        .thenReturn(new SharedFolderResource(tempDir, folder));
+
+    // The archive is streamed, so the response only takes shape once the async
+    // dispatch has run. Driving it explicitly keeps the test independent of the
+    // async timeout, which is switched off for exactly this kind of download.
+    MvcResult started =
+        mockMvc
+            .perform(get("/api/public/secure-sends/token/download-folder"))
+            .andExpect(request().asyncStarted())
+            .andReturn();
+
+    mockMvc
+        .perform(asyncDispatch(started))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Type", "application/zip"))
+        .andExpect(
+            header()
+                .string(
+                    "Content-Disposition", org.hamcrest.Matchers.containsString("project.zip")));
+
+    verify(folderService).writeFolderArchive(eq(tempDir.toString()), eq(folder), any());
+  }
+
+  @Test
+  void previewServesTheFileInlineInsteadOfAsAnAttachment() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("photo.jpg"), "jpeg-bytes");
+    FileResource fileResource = new FileResource(new UrlResource(file.toUri()), "\"6-123\"", 123L);
+    when(secureSendService.resolve("token", null, "images/photo.jpg"))
+        .thenReturn(new SecureSendResource(file, fileResource));
+
+    mockMvc
+        .perform(get("/api/public/secure-sends/token/view").param("path", "images/photo.jpg"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("inline")));
   }
 }

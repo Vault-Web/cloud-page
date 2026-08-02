@@ -25,8 +25,12 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Clock;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -129,11 +133,38 @@ public class ResourceShareService {
   }
 
   public List<ResourceShareDto> listReceived(User recipient) {
-    return shareRepository
-        .findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc(recipient.getId())
-        .stream()
-        .map(share -> toDto(share, findUser(share.getOwnerId()), recipient))
+    List<ResourceShare> shares =
+        shareRepository.findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc(recipient.getId());
+    // Look every owner up once. Both the existence check and the DTO need the
+    // owner, and this listing runs on every visit to "Shared with me", so a
+    // lookup per share would mean two queries per row.
+    Map<String, User> owners =
+        shares.stream()
+            .map(ResourceShare::getOwnerId)
+            .distinct()
+            .map(userRepository::findById)
+            .flatMap(Optional::stream)
+            .collect(Collectors.toMap(User::getId, Function.identity()));
+    return shares.stream()
+        // Hide shares whose underlying file/folder the owner has since deleted or
+        // moved, so the recipient's list stays in sync with reality.
+        .filter(share -> targetStillExists(share, owners.get(share.getOwnerId())))
+        .map(share -> toDto(share, owners.get(share.getOwnerId()), recipient))
         .toList();
+  }
+
+  /** A share whose owner is gone counts as missing, like one whose target was deleted. */
+  private boolean targetStillExists(ResourceShare share, User owner) {
+    if (owner == null) {
+      return false;
+    }
+    try {
+      Path ownerRoot = Paths.get(owner.getRootFolderPath()).toRealPath().normalize();
+      Path target = ownerRoot.resolve(share.getRelativePath()).normalize();
+      return target.startsWith(ownerRoot) && Files.exists(target);
+    } catch (RuntimeException | IOException exception) {
+      return false;
+    }
   }
 
   public void revoke(String ownerId, String shareId) {
@@ -145,6 +176,20 @@ public class ResourceShareService {
       share.setRevokedAt(clock.instant());
       shareRepository.save(share);
     }
+  }
+
+  /**
+   * Lets a recipient drop a share that was given to them. Only removes their own access; the
+   * owner's data is untouched. Distinct from {@link #revoke}, which is the owner withdrawing
+   * access.
+   */
+  public void leave(String recipientId, String shareId) {
+    ResourceShare share =
+        shareRepository
+            .findByIdAndRecipientIdAndRevokedAtIsNull(shareId, recipientId)
+            .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
+    share.setRevokedAt(clock.instant());
+    shareRepository.save(share);
   }
 
   public SharedFileResource resolveFile(
@@ -190,6 +235,73 @@ public class ResourceShareService {
       }
       channel.truncate(0);
       input.transferTo(Channels.newOutputStream(channel));
+    }
+  }
+
+  /**
+   * Adds a new file to a folder share. Requires EDIT. The file lands in the owner's storage and
+   * counts against the owner's quota, so collaborators cannot fill their own space with someone
+   * else's shared folder.
+   */
+  public void uploadToShare(String shareId, User recipient, String folderPath, MultipartFile file)
+      throws IOException {
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException("Uploaded file must not be empty");
+    }
+    ResolvedShare resolved = resolve(shareId, recipient, folderPath, SharePermission.EDIT);
+    if (!Files.isDirectory(resolved.target())) {
+      throw new ResourceNotFoundException("Shared folder", "path", folderPath);
+    }
+    String relativeFolder = resolved.ownerRoot().relativize(resolved.target()).toString();
+    fileService.uploadFile(
+        resolved.ownerRoot().toString(), relativeFolder, file, resolved.ownerQuotaMb());
+  }
+
+  /** Creates a subfolder inside a folder share. Requires EDIT. */
+  public void createFolderInShare(String shareId, User recipient, String parentPath, String name)
+      throws IOException {
+    validateSimpleName(name);
+    ResolvedShare resolved = resolve(shareId, recipient, parentPath, SharePermission.EDIT);
+    if (!Files.isDirectory(resolved.target())) {
+      throw new ResourceNotFoundException("Shared folder", "path", parentPath);
+    }
+    String relativeParent = resolved.ownerRoot().relativize(resolved.target()).toString();
+    folderService.createFolder(resolved.ownerRoot().toString(), relativeParent, name);
+  }
+
+  /**
+   * Deletes a file or folder inside a share. Requires EDIT. The share root itself cannot be deleted
+   * this way — that is the owner's resource, and the recipient's link to it is removed by revoking
+   * the share, not by erasing the data.
+   */
+  public void deleteInShare(String shareId, User recipient, String childPath) throws IOException {
+    ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
+    requireInsideShare(resolved, "The shared resource itself cannot be deleted");
+    String relative = resolved.ownerRoot().relativize(resolved.target()).toString();
+    if (Files.isDirectory(resolved.target())) {
+      folderService.deleteFolder(resolved.ownerRoot().toString(), relative);
+    } else {
+      fileService.deleteFile(resolved.ownerRoot().toString(), relative);
+    }
+  }
+
+  /** Renames a file or folder inside a share, keeping its parent. Requires EDIT. */
+  public void renameInShare(String shareId, User recipient, String path, String newName)
+      throws IOException {
+    validateSimpleName(newName);
+    ResolvedShare resolved = resolve(shareId, recipient, path, SharePermission.EDIT);
+    requireInsideShare(resolved, "The shared resource itself cannot be renamed");
+    Path parent = resolved.target().getParent();
+    if (parent == null) {
+      throw new ShareAccessDeniedException("The shared resource itself cannot be renamed");
+    }
+    String relSource = resolved.ownerRoot().relativize(resolved.target()).toString();
+    String relTarget =
+        resolved.ownerRoot().relativize(parent.resolve(newName).normalize()).toString();
+    if (Files.isDirectory(resolved.target())) {
+      folderService.renameOrMoveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
+    } else {
+      fileService.renameOrMoveFile(resolved.ownerRoot().toString(), relSource, relTarget);
     }
   }
 
@@ -288,6 +400,44 @@ public class ResourceShareService {
     }
   }
 
+  /**
+   * Guards the shared resource itself against a child operation. A child path such as {@code "."}
+   * or {@code "a/.."} normalises back to the share root, which {@link #resolve} accepts because a
+   * path starts with itself — so this has to compare the resolved paths rather than the incoming
+   * string.
+   */
+  private void requireInsideShare(ResolvedShare resolved, String message) {
+    if (resolved.target().equals(resolved.sharedRoot())) {
+      throw new ShareAccessDeniedException(message);
+    }
+  }
+
+  /**
+   * Accepts a single name component. Names are joined onto a directory inside the share, while
+   * {@link FolderService} and {@link FileService} confine paths only to the owner's root — a name
+   * carrying separators would therefore land outside the share but still inside the owner's
+   * storage.
+   */
+  private void validateSimpleName(String name) {
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Name must not be empty");
+    }
+    Path candidate;
+    try {
+      candidate = Path.of(name);
+    } catch (java.nio.file.InvalidPathException exception) {
+      throw new InvalidPathException("Invalid name: " + name);
+    }
+    if (candidate.isAbsolute()
+        || candidate.getNameCount() != 1
+        || name.contains("/")
+        || name.contains("\\")
+        || ".".equals(name)
+        || "..".equals(name)) {
+      throw new IllegalArgumentException("Invalid name: " + name);
+    }
+  }
+
   private void rejectTrashPath(Path path) {
     for (Path part : path) {
       if (TrashService.TRASH_DIR.equals(part.toString())) {
@@ -308,6 +458,7 @@ public class ResourceShareService {
         owner.getUsername(),
         recipient.getUsername(),
         share.getDisplayName(),
+        share.getRelativePath(),
         share.getResourceType(),
         Set.copyOf(share.getPermissions()),
         share.getCreatedAt(),
