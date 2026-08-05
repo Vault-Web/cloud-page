@@ -1,229 +1,75 @@
 # Cloud Page
 
-**Cloud Page** is a backend service in the Vault Web ecosystem for **user-specific file and folder management**.  
-It provides APIs for accessing, creating, editing, and deleting files securely, similar to a traditional file explorer.  
+Cloud Page is the backend service for file and folder management in the Vault Web ecosystem. It provides APIs for browsing, creating, updating, deleting, searching, sharing, and downloading files securely.
 
-This service is designed to integrate seamlessly with **Vault Web**, sharing its **PostgreSQL database** and **pgAdmin setup**.
+> **Note**
+>
+> This repository contains only the backend service. The Cloud user interface is part of the `vault-web` repository under `frontend/src/app/pages/cloud`.
 
 ---
 
 ## Features
 
-- 🔹 **File Explorer-like API** for user files  
-- 🔹 **CRUD operations** on files and folders  
-- 🔹 **Secure access via JWT tokens** using Vault Web's master key  
-- 🔹 **Fuzzy file search** with metadata filters (type, MIME, size, modified date) and sort controls  
-- 🔹 **Streamed folder downloads** as structure-preserving ZIP archives
-- 🔹 **Secure Send** links for expiring, optionally password-protected external downloads
-- 🔹 **User-to-user sharing** for selected files and folders with explicit permissions
+- File and folder management
+- Search with metadata filters
+- Inline file viewing
+- Folder archive downloads
+- Secure Send links
+- User to user sharing
+
+For detailed feature documentation, see [`backend/README.md`](backend/README.md).
 
 ---
 
-## Search
+## Quick Start
 
-`GET /api/folders/search` performs a fuzzy (Jaro-Winkler) name match and accepts optional metadata
-filters and sort controls:
+1. Clone this repository.
+2. Start the required Vault Web services.
+3. Configure the required environment variables.
+4. Run the backend.
 
-```
-GET /api/folders/search?folderPath=/&query=report&type=file&minSize=1024&sortBy=size
-```
-
-| Param | Description |
-|-------|-------------|
-| `type` | `file` or `folder` |
-| `mimeType` | MIME-type prefix, e.g. `image` matches `image/png` |
-| `minSize` / `maxSize` | size bounds in bytes |
-| `modifiedAfter` / `modifiedBefore` | last-modified bounds (epoch millis) |
-| `sortBy` | `relevance` (default), `name`, `size`, or `lastModified` |
-| `ascending` | sort direction; defaults to `false` (best / largest / newest first) |
+For detailed setup instructions, see [`backend/README.md`](backend/README.md#local-development).
 
 ---
 
-## Inline file viewing
+## Dependencies
 
-`GET /api/files/view?path=<user-relative-path>` serves a file for display in the browser. The
-response keeps the file's detected MIME type, uses `Content-Disposition: inline`, and supports
-HTTP byte-range requests for seeking in video, audio, and PDF files. Unknown file types use
-`application/octet-stream`, allowing the client to show a download fallback.
+Cloud Page works with the following components in the Vault Web ecosystem.
 
-The endpoint uses the same authenticated user root and path validation as the other file APIs.
-Viewer actions can reuse the existing endpoints:
+### Vault Web
 
-| Action | Endpoint |
-|-------|----------|
-| Rename or move | `PATCH /api/files/move?filePath=<path>&newPath=<path>` |
-| Delete (move to trash) | `DELETE /api/files?filePath=<path>` |
-| Download | `GET /api/files/download?path=<path>` |
-| Next/previous source list | `GET /api/folders/content?path=<folder>&page=<page>&size=<size>` |
+Cloud Page uses Vault Web for authentication and shared infrastructure. The Cloud user interface is located in the `vault-web` repository under `frontend/src/app/pages/cloud`.
 
-All requests require the existing bearer-token authentication. A frontend using native
-`<video>`, `<audio>`, `<img>`, or embedded PDF elements should expose the endpoint through its
-authenticated same-origin backend/proxy, because those elements cannot attach an arbitrary
-`Authorization` request header.
+### Deploy
 
----
+The deployment repository contains the production configuration and user root folder mapping used by Cloud Page.
 
-## Folder archive download
+## ClamAV
 
-`GET /api/folders/download?path=<user-relative-folder>` streams the selected folder as a ZIP
-archive. The archive keeps nested and empty directories, excludes `.trash`, and does not follow
-symbolic links. Omitting `path` downloads the authenticated user's root folder.
+Cloud Page supports ClamAV for scanning uploaded files for viruses.
 
-The response uses `Content-Type: application/zip` and an attachment filename based on the selected
-folder. Requests use the existing download rate limit and the same authenticated user-root path
-validation as other file and folder APIs.
+Virus scanning is disabled by default, so the application can run locally without a ClamAV service.
 
----
+To enable scanning, set:
 
-## Secure Send
-
-Secure Send exposes one file through an opaque, expiring external URL. It is separate from
-user-to-user sharing: the recipient does not need an account and cannot browse the owner's files.
-
-All management endpoints require the normal JWT:
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/secure-sends` | Create a link for one file |
-| `GET` | `/api/secure-sends` | List the current user's links |
-| `DELETE` | `/api/secure-sends/{id}` | Revoke a link immediately |
-
-Create request:
-
-```json
-{
-  "filePath": "documents/report.pdf",
-  "expiresAt": "2026-07-19T10:00:00Z",
-  "password": "optional password"
-}
+```properties
+cloudpage.virus-scan.enabled=true
 ```
 
-The response includes a `url` suitable for the file viewer or chat UI. The raw token is returned
-only as part of this URL and is not stored by the service. Consequently, the listing endpoint does
-not return reusable URLs; if the creation response is lost, revoke the entry and create a new link.
+Then configure the ClamAV host and port in the application configuration.
 
-The recipient downloads through the public endpoint:
-
-```http
-GET /api/public/secure-sends/{token}
-X-Secure-Send-Password: optional password
-```
-
-Passwords are sent in a header so they do not appear in URLs or browser history. Unknown, expired,
-revoked, deleted, or moved targets return `404`; an incorrect or missing required password returns
-`401`. A link never accepts a file path and therefore cannot be used to list or select another file.
-
-Secure Send expiry, cleanup, and rate limits are configurable with
-`cloudpage.secure-send.*` and `cloudpage.rate-limit.per-client.secure-send-*` properties. Expiry
-blocks access immediately, but the database record remains for the configured retention period
-before scheduled cleanup removes it.
-
----
-
-## User-to-user sharing
-
-Registered users can grant another registered user access to one file or folder without exposing
-the rest of their storage. This authenticated flow is separate from Secure Send. Shares support
-`VIEW`, `DOWNLOAD`, and `EDIT` permissions; permissions are checked again on every shared
-operation.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/shares` | Share an owned file or folder |
-| `GET` | `/api/shares` | List shares created by the current user, including revoked shares |
-| `GET` | `/api/shares/shared-with-me` | List active shares received by the current user |
-| `DELETE` | `/api/shares/{id}` | Revoke an owned share immediately |
-| `GET` | `/api/shares/{id}/content?path=<relative-path>` | List a shared folder or nested folder; requires `VIEW` |
-| `GET` | `/api/shares/{id}/view?path=<relative-path>` | View a shared file or nested file; requires `VIEW` |
-| `GET` | `/api/shares/{id}/download?path=<relative-path>` | Download a shared file or nested file; requires `DOWNLOAD` |
-| `GET` | `/api/shares/{id}/download-folder?path=<relative-path>` | Download a shared folder or nested folder as ZIP; requires `DOWNLOAD` |
-| `PUT` | `/api/shares/{id}/edit?path=<relative-path>` | Replace a shared file or nested file using multipart field `file`; requires `EDIT` |
-
-Create request:
-
-```json
-{
-  "path": "projects/website",
-  "recipientUsername": "bob",
-  "permissions": ["VIEW", "DOWNLOAD", "EDIT"]
-}
-```
-
-The resource type is inferred from the owned path. A recipient uses the returned share ID and, for
-a folder share, may supply only paths relative to that shared folder. Omitting `path` addresses the
-shared file or folder itself. Absolute paths, parent traversal outside the shared folder, symbolic
-link escapes, and `.trash` paths are rejected. Moving or deleting the original resource makes the
-share unavailable; revocation removes recipient access immediately. `EDIT` replaces the contents
-of an existing shared file and cannot create files or change anything outside the shared boundary.
-It also enforces the owner's storage quota. Creating the same active share again reuses that share
-and updates its permissions instead of adding a duplicate. Shared browsing, downloads, and edits
-use the existing listing, download, and upload rate-limit budgets respectively.
+This allows developers to work on the project without installing ClamAV while still supporting virus scanning when it is available.
 
 ---
 
 ## Project Structure
 
-- Backend implemented in **Spring Boot**  
-- Uses **PostgreSQL** from the Vault Web repository for storage  
-- See [**DIRECTORY.md**](https://github.com/Vault-Web/cloud-page/blob/main/DIRECTORY.md) for full project structure  
+See [DIRECTORY.md](DIRECTORY.md) for an overview of the project structure.
 
 ---
 
-## Local Development
+## Questions
 
-Cloud Page relies on the **Vault Web Docker setup** for PostgreSQL and pgAdmin. Make sure you have the **Vault Web environment running** before starting Cloud Page.
+For questions or issues, please open an issue in this repository.
 
----
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/Vault-Web/cloud-page.git
-cd cloud-page
-````
-
----
-
-### 2. Configure `.env`
-
-Create a `.env` file in the root directory with:
-
-```env
-# JWT config
-MASTER_KEY=your_master_key_here
-````
-
-> 📝 Make sure **PostgreSQL from the Vault Web Docker setup is running** before starting Cloud Page.
-> Run `docker compose up -d` in the Vault Web repository if not already running.
-> The database credentials are inherited from the Vault Web `.env` setup.
-> Do **not** use production secrets during local development.
-
----
-
-### 3. Start the Backend
-
-The backend runs on port `8090` (can be changed in `application.properties`).
-Make sure the Vault Web Docker stack is already running (PostgreSQL & pgAdmin).
-
-```bash
-./mvnw spring-boot:run
-```
-
-Then visit:
-
-* API Base: [http://localhost:8090](http://localhost:8090)
-* Swagger UI: [http://localhost:8090/swagger-ui.html](http://localhost:8081/swagger-ui.html)
-
----
-
-## Notes
-
-* This service **depends on Vault Web** for database and authentication.
-* JWT tokens must use the **same master key** as Vault Web.
-
----
-
-## 📫 Questions?
-
-For any issues, feel free to open an issue in this repository.
-Integration or usage questions related to Vault Web should reference the main Vault Web documentation.
+For integration or usage questions related to Vault Web, refer to the Vault Web documentation.
