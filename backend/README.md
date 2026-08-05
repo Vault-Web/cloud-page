@@ -263,8 +263,8 @@ Make sure the Vault Web Docker stack is already running (PostgreSQL & pgAdmin).
 
 Then visit:
 
-* API Base: [http://localhost:8090](http://localhost:8090)
-* Swagger UI: [http://localhost:8090/swagger-ui.html](http://localhost:8081/swagger-ui.html)
+* API Base: [https://localhost:8090](https://localhost:8090)
+* Swagger UI: [https://localhost:8090/swagger-ui.html](https://localhost:8090/swagger-ui.html)
 
 ---
 
