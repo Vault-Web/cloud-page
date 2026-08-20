@@ -59,7 +59,8 @@ public class SecurityConfig {
                         "/webjars/**",
                         "/docs/**",
                         "/ws-chat/**",
-                        "/api/public/secure-sends/**")
+                        "/api/public/secure-sends/**",
+                                "/error")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
