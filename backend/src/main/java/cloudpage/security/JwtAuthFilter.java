@@ -29,8 +29,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
    * SecurityConfig} permits. Keep both lists in sync; {@code /api/public/} is the agreed prefix for
    * endpoints that are reachable without a session, such as share links.
    */
-  private static final List<String> UNAUTHENTICATED_PREFIXES =
-      List.of("/api/auth/", "/api/public/", "/v3/api-docs", "/swagger-ui");
+  private static final List<String> UNAUTHENTICATED_PREFIXES = PublicPaths.PREFIXES;
 
   private final JwtUtil jwtUtil;
 
