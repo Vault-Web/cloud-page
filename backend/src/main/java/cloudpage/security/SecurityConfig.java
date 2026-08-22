@@ -45,24 +45,15 @@ public class SecurityConfig {
    */
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    String[] permittedPatterns =
+        PublicPaths.PREFIXES.stream().map(prefix -> prefix + "**").toArray(String[]::new);
+
     http.cors(withDefaults())
         .csrf(csrf -> csrf.disable())
         .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers(
-                        "/api/auth/**",
-                        "/v3/api-docs/**",
-                        "/swagger-ui/**",
-                        "/swagger-ui.html",
-                        "/swagger-resources/**",
-                        "/webjars/**",
-                        "/docs/**",
-                        "/ws-chat/**",
-                        "/api/public/secure-sends/**")
-                    .permitAll()
-                    .anyRequest()
-                    .authenticated())
+                auth.requestMatchers(permittedPatterns).permitAll().anyRequest().authenticated())
         .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterAfter(rateLimitFilter, JwtAuthFilter.class);
 
