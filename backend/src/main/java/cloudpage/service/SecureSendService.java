@@ -100,7 +100,7 @@ public class SecureSendService {
   public CreatedSecureSend create(
       User owner, String relativeFilePath, Instant expiresAt, String password) throws IOException {
     Instant now = clock.instant();
-    if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(maxExpiry))) {
+    if (expiresAt != null && (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(maxExpiry)))) {
       throw new IllegalArgumentException(
           "Expiry must be in the future and no more than " + maxExpiry.toDays() + " days away");
     }
@@ -157,6 +157,14 @@ public class SecureSendService {
       send.setRevokedAt(clock.instant());
       secureSendRepository.save(send);
     }
+  }
+
+  public void delete(String ownerId, String id) {
+    SecureSend send =
+        secureSendRepository
+            .findByIdAndOwnerId(id, ownerId)
+            .orElseThrow(() -> new ResourceNotFoundException("SecureSend", "id", id));
+    secureSendRepository.delete(send);
   }
 
   /**
@@ -260,7 +268,8 @@ public class SecureSendService {
         secureSendRepository
             .findByTokenHash(hashToken(token))
             .orElseThrow(SecureSendUnavailableException::new);
-    if (send.getRevokedAt() != null || !send.getExpiresAt().isAfter(clock.instant())) {
+    boolean expired = send.getExpiresAt() != null && !send.getExpiresAt().isAfter(clock.instant());
+    if (send.getRevokedAt() != null || expired) {
       throw new SecureSendUnavailableException();
     }
     return send;
@@ -273,6 +282,8 @@ public class SecureSendService {
             || !passwordEncoder.matches(password, send.getPasswordHash()))) {
       throw new InvalidSecureSendPasswordException();
     }
+    send.setLastAccessedAt(clock.instant());
+    secureSendRepository.save(send);
     return send;
   }
 
@@ -345,7 +356,8 @@ public class SecureSendService {
         send.getCreatedAt(),
         send.getExpiresAt(),
         send.getPasswordHash() != null,
-        send.getRevokedAt() != null);
+        send.getRevokedAt() != null,
+        send.getLastAccessedAt());
   }
 
   @Scheduled(cron = "${cloudpage.secure-send.cleanup-cron:0 30 3 * * *}")
