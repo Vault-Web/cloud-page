@@ -1,17 +1,13 @@
 package cloudpage.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import cloudpage.dto.CreatedSecureSend;
 import cloudpage.exceptions.InvalidSecureSendPasswordException;
+import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.exceptions.SecureSendUnavailableException;
 import cloudpage.model.SecureSend;
 import cloudpage.model.SharedResourceType;
@@ -21,6 +17,7 @@ import cloudpage.repository.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -254,5 +251,70 @@ class SecureSendServiceTest {
     } finally {
       Files.deleteIfExists(outside);
     }
+  }
+
+  @Test
+  void createWithNullExpirySucceeds() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+
+    CreatedSecureSend created = service.create(owner, "report.pdf", null, null);
+
+    assertThat(created.secureSend().getExpiresAt()).isNull();
+  }
+
+  @Test
+  void createRejectsExpiryTooFarInFuture() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+    Instant tooFar = NOW.plus(Duration.ofDays(31));
+
+    assertThrows(
+        IllegalArgumentException.class, () -> service.create(owner, "report.pdf", tooFar, null));
+  }
+
+  @Test
+  void nullExpiryLinkNeverExpires() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+    CreatedSecureSend created = service.create(owner, "report.pdf", null, null);
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    assertDoesNotThrow(() -> service.describe(created.token()));
+  }
+
+  @Test
+  void deleteRemovesRecordEntirely() {
+    SecureSend send = new SecureSend();
+    send.setId("send-1");
+    send.setOwnerId("owner-1");
+    when(secureSendRepository.findByIdAndOwnerId("send-1", "owner-1"))
+        .thenReturn(Optional.of(send));
+
+    service.delete("owner-1", "send-1");
+
+    verify(secureSendRepository).delete(send);
+  }
+
+  @Test
+  void deleteUnknownIdThrowsResourceNotFound() {
+    when(secureSendRepository.findByIdAndOwnerId("missing", "owner-1"))
+        .thenReturn(Optional.empty());
+
+    assertThrows(ResourceNotFoundException.class, () -> service.delete("owner-1", "missing"));
+  }
+
+  @Test
+  void resolveSetsLastAccessedAt() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+    CreatedSecureSend created = service.create(owner, "report.pdf", NOW.plusSeconds(3600), null);
+    assertNull(created.secureSend().getLastAccessedAt());
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    service.resolve(created.token(), null, "");
+
+    assertEquals(NOW, created.secureSend().getLastAccessedAt());
+    verify(secureSendRepository, times(2)).save(created.secureSend());
   }
 }

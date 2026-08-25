@@ -19,4 +19,5 @@ public class SecureSendDto {
   private Instant expiresAt;
   private boolean passwordProtected;
   private boolean revoked;
+  private Instant lastAccessedAt;
 }

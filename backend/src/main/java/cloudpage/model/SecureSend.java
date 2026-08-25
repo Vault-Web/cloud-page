@@ -60,8 +60,10 @@ public class SecureSend {
   @Column(nullable = false)
   private Instant createdAt;
 
-  @Column(nullable = false)
+  @Column(nullable = true)
   private Instant expiresAt;
 
   private Instant revokedAt;
+
+  private Instant lastAccessedAt;
 }

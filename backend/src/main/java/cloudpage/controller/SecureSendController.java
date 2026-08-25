@@ -90,6 +90,12 @@ public class SecureSendController {
     return ResponseEntity.noContent().build();
   }
 
+  @DeleteMapping("/secure-sends/{id}/permanent")
+  public ResponseEntity<Void> delete(@PathVariable String id) {
+    secureSendService.delete(userService.getCurrentUser().getId(), id);
+    return ResponseEntity.noContent().build();
+  }
+
   @GetMapping("/public/secure-sends/{token}/meta")
   public PublicSecureSendDto describe(@PathVariable String token) {
     return secureSendService.describe(token);
