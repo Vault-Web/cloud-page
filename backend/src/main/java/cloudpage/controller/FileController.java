@@ -37,7 +37,7 @@ public class FileController {
 
   @PostMapping("/upload")
   public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
-          throws IOException {
+      throws IOException {
     var user = userService.getCurrentUser();
     fileService.uploadFile(user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb());
   }
@@ -64,7 +64,7 @@ public class FileController {
 
   @PatchMapping("/move")
   public void renameOrMoveFile(@RequestParam String filePath, @RequestParam String newPath)
-          throws IOException {
+      throws IOException {
     var user = userService.getCurrentUser();
     fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, newPath);
   }
@@ -82,18 +82,18 @@ public class FileController {
     }
 
     return ResponseEntity.ok()
-            .eTag(result.getETag())
-            .lastModified(result.getLastModified())
-            .header(HttpHeaders.CONTENT_TYPE, mimeType)
-            .header(
-                    HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + fullPath.getFileName() + "\"")
-            .body(result.getResource());
+        .eTag(result.getETag())
+        .lastModified(result.getLastModified())
+        .header(HttpHeaders.CONTENT_TYPE, mimeType)
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"" + fullPath.getFileName() + "\"")
+        .body(result.getResource());
   }
 
   @GetMapping("/view")
   public ResponseEntity<ResourceRegion> viewFile(
-          @RequestParam String path, @RequestHeader HttpHeaders headers) throws IOException {
+      @RequestParam String path, @RequestHeader HttpHeaders headers) throws IOException {
     var user = userService.getCurrentUser();
     Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
     folderService.validatePath(user.getRootFolderPath(), fullPath);
@@ -109,45 +109,45 @@ public class FileController {
     List<HttpRange> ranges = headers.getRange();
 
     ContentDisposition contentDisposition =
-            ContentDisposition.inline()
-                    .filename(fullPath.getFileName().toString(), StandardCharsets.UTF_8)
-                    .build();
+        ContentDisposition.inline()
+            .filename(fullPath.getFileName().toString(), StandardCharsets.UTF_8)
+            .build();
 
     if (!ranges.isEmpty()) {
       HttpRange range = ranges.get(0);
       long rangeStart = range.getRangeStart(contentLength);
       if (rangeStart >= contentLength) {
         return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                .header(HttpHeaders.CONTENT_RANGE, "bytes */" + contentLength)
-                .build();
+            .header(HttpHeaders.CONTENT_RANGE, "bytes */" + contentLength)
+            .build();
       }
       long rangeEnd = range.getRangeEnd(contentLength);
       long rangeLength = rangeEnd - rangeStart + 1;
 
       ResourceRegion region = new ResourceRegion(resource, rangeStart, rangeLength);
       return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-              .eTag(result.getETag())
-              .lastModified(result.getLastModified())
-              .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-              .contentType(MediaType.parseMediaType(mimeType))
-              .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
-              .body(region);
+          .eTag(result.getETag())
+          .lastModified(result.getLastModified())
+          .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+          .contentType(MediaType.parseMediaType(mimeType))
+          .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+          .body(region);
     }
 
     ResourceRegion fullRegion = new ResourceRegion(resource, 0, contentLength);
     return ResponseEntity.ok()
-            .eTag(result.getETag())
-            .lastModified(result.getLastModified())
-            .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-            .contentType(MediaType.parseMediaType(mimeType))
-            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
-            .body(fullRegion);
+        .eTag(result.getETag())
+        .lastModified(result.getLastModified())
+        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+        .contentType(MediaType.parseMediaType(mimeType))
+        .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+        .body(fullRegion);
   }
 
   @GetMapping("/checksum")
   public ResponseEntity<ChecksumDto> getFileChecksum(
-          @RequestParam String path, @RequestParam(required = false) String expected)
-          throws IOException {
+      @RequestParam String path, @RequestParam(required = false) String expected)
+      throws IOException {
     var user = userService.getCurrentUser();
     String checksum = fileService.calculateChecksum(user.getRootFolderPath(), path);
     Boolean match = (expected == null) ? null : checksum.equalsIgnoreCase(expected);
