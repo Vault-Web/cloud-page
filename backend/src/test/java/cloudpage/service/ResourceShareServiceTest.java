@@ -17,6 +17,7 @@ import cloudpage.model.SharePermission;
 import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.ResourceShareRepository;
+import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,6 +42,7 @@ class ResourceShareServiceTest {
 
   @Mock private ResourceShareRepository shareRepository;
   @Mock private UserRepository userRepository;
+  @Mock private TrashEntryRepository trashEntryRepository;
 
   @TempDir Path ownerRoot;
 
@@ -50,21 +52,27 @@ class ResourceShareServiceTest {
 
   @BeforeEach
   void setUp() {
+    FolderService folderService = new FolderService();
+    // A real TrashService (not a mock) so trashing a file has the same on-disk effect it would
+    // have for a real user: the file actually moves into .trash. Only its own repository
+    // dependency is mocked, since that would otherwise need a database.
+    TrashService trashService = new TrashService(trashEntryRepository, userRepository, folderService);
     service =
-        new ResourceShareService(
-            shareRepository,
-            userRepository,
-            new FolderService(),
-            new FileService(),
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            new ResourceShareService(
+                    shareRepository,
+                    userRepository,
+                    folderService,
+                    new FileService(),
+                    trashService,
+                    Clock.fixed(NOW, ZoneOffset.UTC));
     owner = user("owner-1", "alice", ownerRoot);
     recipient = user("recipient-1", "bob", ownerRoot.resolve("unused"));
     lenient().when(userRepository.findByUsername("bob")).thenReturn(Optional.of(recipient));
     lenient().when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
     lenient().when(userRepository.findById("recipient-1")).thenReturn(Optional.of(recipient));
     lenient()
-        .when(shareRepository.save(any(ResourceShare.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+            .when(shareRepository.save(any(ResourceShare.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
   }
 
   @Test
@@ -72,8 +80,8 @@ class ResourceShareServiceTest {
     Files.writeString(ownerRoot.resolve("report.pdf"), "report");
 
     var dto =
-        service.create(
-            owner, "report.pdf", "bob", Set.of(SharePermission.VIEW, SharePermission.DOWNLOAD));
+            service.create(
+                    owner, "report.pdf", "bob", Set.of(SharePermission.VIEW, SharePermission.DOWNLOAD));
 
     assertEquals("alice", dto.ownerUsername());
     assertEquals("bob", dto.recipientUsername());
@@ -89,7 +97,7 @@ class ResourceShareServiceTest {
     existing.setPermissions(Set.of(SharePermission.VIEW));
     when(shareRepository.findByOwnerIdAndRecipientIdAndRelativePathAndRevokedAtIsNull(
             "owner-1", "recipient-1", "report.pdf"))
-        .thenReturn(Optional.of(existing));
+            .thenReturn(Optional.of(existing));
 
     var dto = service.create(owner, "report.pdf", "bob", Set.of(SharePermission.DOWNLOAD));
 
@@ -103,8 +111,8 @@ class ResourceShareServiceTest {
     Path outside = Files.createTempFile("outside-share", ".txt");
     try {
       assertThrows(
-          InvalidPathException.class,
-          () -> service.create(owner, outside.toString(), "bob", Set.of(SharePermission.VIEW)));
+              InvalidPathException.class,
+              () -> service.create(owner, outside.toString(), "bob", Set.of(SharePermission.VIEW)));
     } finally {
       Files.deleteIfExists(outside);
     }
@@ -116,15 +124,15 @@ class ResourceShareServiceTest {
     Files.writeString(ownerRoot.resolve("private.txt"), "private");
     ResourceShare share = share("share-1", "shared.txt", SharedResourceType.FILE);
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     var resolved = service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD);
 
     assertEquals(target.toRealPath(), resolved.path());
     User stranger = user("stranger-1", "mallory", ownerRoot.resolve("unused-2"));
     assertThrows(
-        ResourceNotFoundException.class,
-        () -> service.resolveFile("share-1", stranger, "", SharePermission.DOWNLOAD));
+            ResourceNotFoundException.class,
+            () -> service.resolveFile("share-1", stranger, "", SharePermission.DOWNLOAD));
   }
 
   @Test
@@ -133,22 +141,22 @@ class ResourceShareServiceTest {
     ResourceShare share = share("share-1", "preview.txt", SharedResourceType.FILE);
     share.setPermissions(Set.of(SharePermission.VIEW));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     assertTrue(
-        service
-            .resolveFile("share-1", recipient, "", SharePermission.VIEW)
-            .fileResource()
-            .getResource()
-            .exists());
+            service
+                    .resolveFile("share-1", recipient, "", SharePermission.VIEW)
+                    .fileResource()
+                    .getResource()
+                    .exists());
     assertThrows(
-        ShareAccessDeniedException.class,
-        () -> service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD));
+            ShareAccessDeniedException.class,
+            () -> service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD));
     assertThrows(
-        ShareAccessDeniedException.class,
-        () ->
-            service.editFile(
-                "share-1", recipient, "", new MockMultipartFile("file", "updated".getBytes())));
+            ShareAccessDeniedException.class,
+            () ->
+                    service.editFile(
+                            "share-1", recipient, "", new MockMultipartFile("file", "updated".getBytes())));
   }
 
   @Test
@@ -159,23 +167,23 @@ class ResourceShareServiceTest {
     ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
     share.setPermissions(Set.of(SharePermission.EDIT));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     service.editFile(
-        "share-1",
-        recipient,
-        "notes.txt",
-        new MockMultipartFile("file", "notes.txt", "text/plain", "after".getBytes()));
+            "share-1",
+            recipient,
+            "notes.txt",
+            new MockMultipartFile("file", "notes.txt", "text/plain", "after".getBytes()));
 
     assertEquals("after", Files.readString(target));
     assertThrows(
-        ResourceNotFoundException.class,
-        () ->
-            service.editFile(
-                "share-1",
-                recipient,
-                "../private.txt",
-                new MockMultipartFile("file", "blocked".getBytes())));
+            ResourceNotFoundException.class,
+            () ->
+                    service.editFile(
+                            "share-1",
+                            recipient,
+                            "../private.txt",
+                            new MockMultipartFile("file", "blocked".getBytes())));
     assertEquals("private", Files.readString(ownerRoot.resolve("private.txt")));
   }
 
@@ -186,13 +194,13 @@ class ResourceShareServiceTest {
     ResourceShare share = share("share-1", "notes.txt", SharedResourceType.FILE);
     share.setPermissions(Set.of(SharePermission.EDIT));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            service.editFile(
-                "share-1", recipient, "", new MockMultipartFile("file", "replacement".getBytes())));
+            IllegalArgumentException.class,
+            () ->
+                    service.editFile(
+                            "share-1", recipient, "", new MockMultipartFile("file", "replacement".getBytes())));
     assertEquals("before", Files.readString(target));
   }
 
@@ -204,17 +212,17 @@ class ResourceShareServiceTest {
     Files.writeString(ownerRoot.resolve("private.txt"), "private");
     ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     assertEquals(
-        target.toRealPath(),
-        service
-            .resolveFile("share-1", recipient, "nested/notes.txt", SharePermission.DOWNLOAD)
-            .path());
+            target.toRealPath(),
+            service
+                    .resolveFile("share-1", recipient, "nested/notes.txt", SharePermission.DOWNLOAD)
+                    .path());
     assertThrows(
-        ResourceNotFoundException.class,
-        () ->
-            service.resolveFile("share-1", recipient, "../private.txt", SharePermission.DOWNLOAD));
+            ResourceNotFoundException.class,
+            () ->
+                    service.resolveFile("share-1", recipient, "../private.txt", SharePermission.DOWNLOAD));
   }
 
   @Test
@@ -223,16 +231,16 @@ class ResourceShareServiceTest {
     ResourceShare share = share("share-1", "shared.txt", SharedResourceType.FILE);
     when(shareRepository.findByIdAndOwnerId("share-1", "owner-1")).thenReturn(Optional.of(share));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share))
-        .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(share))
+            .thenReturn(Optional.empty());
 
     service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD);
     service.revoke("owner-1", "share-1");
 
     assertEquals(NOW, share.getRevokedAt());
     assertThrows(
-        ResourceNotFoundException.class,
-        () -> service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD));
+            ResourceNotFoundException.class,
+            () -> service.resolveFile("share-1", recipient, "", SharePermission.DOWNLOAD));
   }
 
   @Test
@@ -242,18 +250,18 @@ class ResourceShareServiceTest {
     Files.writeString(nested.resolve("notes.txt"), "notes");
     ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
     share.setPermissions(
-        Set.of(SharePermission.VIEW, SharePermission.DOWNLOAD, SharePermission.EDIT));
+            Set.of(SharePermission.VIEW, SharePermission.DOWNLOAD, SharePermission.EDIT));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     // Every spelling that normalises back to the share root, not just the empty one.
     for (String selfPath : new String[] {"", ".", "nested/.."}) {
       assertThrows(
-          ShareAccessDeniedException.class,
-          () -> service.deleteInShare("share-1", recipient, selfPath));
+              ShareAccessDeniedException.class,
+              () -> service.deleteInShare("share-1", recipient, selfPath));
       assertThrows(
-          ShareAccessDeniedException.class,
-          () -> service.renameInShare("share-1", recipient, selfPath, "renamed"));
+              ShareAccessDeniedException.class,
+              () -> service.renameInShare("share-1", recipient, selfPath, "renamed"));
     }
     assertTrue(Files.isDirectory(project), "the owner's shared folder must survive");
 
@@ -262,21 +270,77 @@ class ResourceShareServiceTest {
     assertTrue(Files.notExists(nested.resolve("notes.txt")));
   }
 
+  /**
+   * Regression test for the bug: deleting a file inside a share used to hard-delete it via
+   * {@code fileService.deleteFile}, bypassing the owner's trash entirely and leaving the owner
+   * with no way to recover a file an EDIT-permission recipient deleted.
+   */
+  @Test
+  void deletingAFileInsideAShareMovesItToTheOwnersTrashInsteadOfHardDeleting() throws Exception {
+    Files.writeString(ownerRoot.resolve("report.pdf"), "report");
+    ResourceShare share = share("share-1", "report.pdf", SharedResourceType.FILE);
+    share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+            .thenReturn(Optional.of(share));
+
+    service.deleteInShare("share-1", recipient, "");
+
+    assertTrue(Files.notExists(ownerRoot.resolve("report.pdf")), "gone from its original path");
+    Path trashDir = ownerRoot.resolve(".trash");
+    assertTrue(Files.isDirectory(trashDir), "a trash directory must have been created");
+    try (var trashedFiles = Files.list(trashDir)) {
+      assertEquals(1, trashedFiles.count(), "the file must exist somewhere recoverable in trash");
+    }
+    // The trash entry is recorded under the OWNER's id, not the recipient's — it is the owner's
+    // trash to see and restore from, not the recipient's.
+    verify(trashEntryRepository, times(1))
+            .save(
+                    org.mockito.ArgumentMatchers.argThat(
+                            entry ->
+                                    entry.getUserId().equals("owner-1")
+                                            && entry.getOriginalPath().equals("report.pdf")));
+  }
+
+  /**
+   * Documents current, intentional behavior rather than a gap this fix introduces: folders have
+   * no trash mechanism anywhere in this codebase yet (an owner's own folder delete via
+   * FolderController hard-deletes too), so deleting a folder inside a share still hard-deletes,
+   * consistent with what the owner's own delete does today. Building folder-level trash is
+   * separate, larger follow-up work, not something this fix silently expands into.
+   */
+  @Test
+  void deletingAFolderInsideAShareStillHardDeletes_matchingCurrentOwnerBehavior() throws Exception {
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    Files.createDirectory(project.resolve("subfolder"));
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
+    share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+            .thenReturn(Optional.of(share));
+
+    service.deleteInShare("share-1", recipient, "subfolder");
+
+    assertTrue(Files.notExists(project.resolve("subfolder")));
+    assertTrue(
+            Files.notExists(ownerRoot.resolve(".trash")),
+            "no trash entry should be created for a folder — that mechanism does not exist yet");
+    verify(trashEntryRepository, times(0)).save(any());
+  }
+
   @Test
   void newNamesInsideAShareMustBeASingleComponent() throws Exception {
     Path project = Files.createDirectory(ownerRoot.resolve("project"));
     ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
     share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
-        .thenReturn(Optional.of(share));
+            .thenReturn(Optional.of(share));
 
     // A name is joined onto a directory inside the share; separators would place it
     // outside the share while still inside the owner's root, where FolderService
     // would happily create it.
     for (String escaping : new String[] {"../escape", "nested/deep", "..", "."}) {
       assertThrows(
-          IllegalArgumentException.class,
-          () -> service.createFolderInShare("share-1", recipient, "", escaping));
+              IllegalArgumentException.class,
+              () -> service.createFolderInShare("share-1", recipient, "", escaping));
     }
     assertTrue(Files.notExists(ownerRoot.resolve("escape")));
 
@@ -291,7 +355,7 @@ class ResourceShareServiceTest {
     ResourceShare kept = share("share-kept", "kept.txt", SharedResourceType.FILE);
     ResourceShare removed = share("share-removed", "deleted.txt", SharedResourceType.FILE);
     when(shareRepository.findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc("recipient-1"))
-        .thenReturn(List.of(kept, removed));
+            .thenReturn(List.of(kept, removed));
 
     var received = service.listReceived(recipient);
 
