@@ -110,6 +110,35 @@ class FileServiceTest {
         () -> fileService.uploadFile(tempDir.toString(), "docs", file, null));
   }
 
+  // ── validateAdditionalStorageWithinQuota ────────────────────────────────
+
+  @Test
+  void validateAdditionalStorageWithinQuota_exceedsQuota_throwsIllegalArgumentException()
+      throws IOException {
+    Files.write(tempDir.resolve("existing.txt"), new byte[1024 * 1024]);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
+  }
+
+  @Test
+  void validateAdditionalStorageWithinQuota_atQuotaLimit_doesNotThrow() throws IOException {
+    Files.write(tempDir.resolve("existing.txt"), new byte[1024 * 1024 - 1]);
+
+    assertDoesNotThrow(
+        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
+  }
+
+  @Test
+  void validateAdditionalStorageWithinQuota_ignoresTrashFiles() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Files.write(trash.resolve("deleted.txt"), new byte[1024 * 1024]);
+
+    assertDoesNotThrow(
+        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
+  }
+
   // ── deleteFile ───────────────────────────────────────────────────────────
 
   @Test

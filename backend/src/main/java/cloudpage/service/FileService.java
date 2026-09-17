@@ -13,6 +13,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.stream.Stream;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,7 @@ public class FileService {
 
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
-   * quota is supplied, the upload is rejected if it would push the user's total storage usage
+   * quota is supplied, the upload is rejected if it would push the user's active storage usage
    * beyond the limit. An existing file with the same name is overwritten.
    *
    * @param rootPath the root directory of the user, used as a security boundary
@@ -49,21 +50,7 @@ public class FileService {
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
     }
-    // Only measure the whole storage when a quota is actually enforced. The walk
-    // is O(all files) and, on a large tree over a spinning disk, slow enough to
-    // time the request out — so it must not run when there is no quota to check.
-    if (quotaMb != null) {
-      long newFileSize = file.getSize();
-      long currentSize = calculateDirectorySize(Paths.get(rootPath));
-      long quotaBytes = quotaMb * 1024 * 1024;
-
-      if (currentSize + newFileSize > quotaBytes) {
-        throw new IllegalArgumentException(
-            "Upload rejected: storage limit of "
-                + quotaMb
-                + " MB reached. Please delete files to free space.");
-      }
-    }
+    validateAdditionalStorageWithinQuota(rootPath, file.getSize(), quotaMb);
 
     String originalFilename = file.getOriginalFilename();
     if (originalFilename == null || originalFilename.isBlank()) {
@@ -266,7 +253,7 @@ public class FileService {
     if (quotaMb == null) {
       return;
     }
-    long currentSize = calculateDirectorySize(Paths.get(rootPath));
+    long currentSize = calculateActiveDirectorySize(Paths.get(rootPath));
     long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
     long projectedSize = Math.subtractExact(currentSize, existingFileSize);
     projectedSize = Math.addExact(projectedSize, replacementSize);
@@ -277,27 +264,54 @@ public class FileService {
   }
 
   /**
-   * Calculates the total size of a directory by recursively summing the sizes of all regular files
-   * it contains. Files whose size cannot be read are skipped.
+   * Ensures that adding bytes to active storage would not exceed the owner's storage quota.
+   *
+   * @param rootPath the root directory of the user
+   * @param additionalBytes the number of bytes to add to active storage
+   * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
+   * @throws IOException if the directory tree cannot be traversed
+   * @throws IllegalArgumentException if the additional storage would exceed the quota
+   */
+  public void validateAdditionalStorageWithinQuota(
+      String rootPath, long additionalBytes, Long quotaMb) throws IOException {
+    if (quotaMb == null) {
+      return;
+    }
+
+    long currentSize = calculateActiveDirectorySize(Paths.get(rootPath));
+    long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
+    long projectedSize = Math.addExact(currentSize, additionalBytes);
+    if (projectedSize > quotaBytes) {
+      throw new IllegalArgumentException("Storage limit of " + quotaMb + " MB would be exceeded");
+    }
+  }
+
+  /**
+   * Calculates active storage usage by recursively summing regular files outside the root's {@code
+   * .trash} directory. Files whose size cannot be read are skipped.
    *
    * @param path the directory to measure
    * @return the total size in bytes of all regular files under {@code path}, or {@code 0} if the
    *     path does not exist
    * @throws IOException if the directory tree cannot be traversed
    */
-  private long calculateDirectorySize(Path path) throws IOException {
+  private long calculateActiveDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
 
-    return Files.walk(path)
-        .filter(Files::isRegularFile)
-        .mapToLong(
-            p -> {
-              try {
-                return Files.size(p);
-              } catch (IOException e) {
-                return 0;
-              }
-            })
-        .sum();
+    Path trashPath = path.resolve(".trash");
+    try (Stream<Path> paths = Files.walk(path)) {
+      return paths
+          .filter(p -> !p.startsWith(trashPath))
+          .filter(Files::isRegularFile)
+          .mapToLong(
+              p -> {
+                try {
+                  return Files.size(p);
+                } catch (IOException e) {
+                  return 0;
+                }
+              })
+          .sum();
+    }
   }
 }
