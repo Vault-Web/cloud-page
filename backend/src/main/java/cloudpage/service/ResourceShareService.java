@@ -48,21 +48,27 @@ public class ResourceShareService {
 
   @Autowired
   public ResourceShareService(
-          ResourceShareRepository shareRepository,
-          UserRepository userRepository,
-          FolderService folderService,
-          FileService fileService,
-          TrashService trashService) {
-    this(shareRepository, userRepository, folderService, fileService, trashService, Clock.systemUTC());
+      ResourceShareRepository shareRepository,
+      UserRepository userRepository,
+      FolderService folderService,
+      FileService fileService,
+      TrashService trashService) {
+    this(
+        shareRepository,
+        userRepository,
+        folderService,
+        fileService,
+        trashService,
+        Clock.systemUTC());
   }
 
   ResourceShareService(
-          ResourceShareRepository shareRepository,
-          UserRepository userRepository,
-          FolderService folderService,
-          FileService fileService,
-          TrashService trashService,
-          Clock clock) {
+      ResourceShareRepository shareRepository,
+      UserRepository userRepository,
+      FolderService folderService,
+      FileService fileService,
+      TrashService trashService,
+      Clock clock) {
     this.shareRepository = shareRepository;
     this.userRepository = userRepository;
     this.folderService = folderService;
@@ -72,19 +78,19 @@ public class ResourceShareService {
   }
 
   public ResourceShareDto create(
-          User owner, String path, String recipientUsername, Set<SharePermission> permissions)
-          throws IOException {
+      User owner, String path, String recipientUsername, Set<SharePermission> permissions)
+      throws IOException {
     User recipient =
-            userRepository
-                    .findByUsername(recipientUsername)
-                    .orElseThrow(
-                            () -> new ResourceNotFoundException("User", "Username", recipientUsername));
+        userRepository
+            .findByUsername(recipientUsername)
+            .orElseThrow(
+                () -> new ResourceNotFoundException("User", "Username", recipientUsername));
     if (owner.getId().equals(recipient.getId())) {
       throw new IllegalArgumentException("A resource cannot be shared with its owner");
     }
     if (permissions == null
-            || permissions.isEmpty()
-            || permissions.stream().anyMatch(java.util.Objects::isNull)) {
+        || permissions.isEmpty()
+        || permissions.stream().anyMatch(java.util.Objects::isNull)) {
       throw new IllegalArgumentException("At least one valid permission is required");
     }
 
@@ -120,8 +126,8 @@ public class ResourceShareService {
     share.setPermissions(new HashSet<>(permissions));
     share.setCreatedAt(clock.instant());
     var existing =
-            shareRepository.findByOwnerIdAndRecipientIdAndRelativePathAndRevokedAtIsNull(
-                    owner.getId(), recipient.getId(), share.getRelativePath());
+        shareRepository.findByOwnerIdAndRecipientIdAndRelativePathAndRevokedAtIsNull(
+            owner.getId(), recipient.getId(), share.getRelativePath());
     if (existing.isPresent()) {
       ResourceShare activeShare = existing.get();
       activeShare.setPermissions(new HashSet<>(permissions));
@@ -132,29 +138,29 @@ public class ResourceShareService {
 
   public List<ResourceShareDto> listOwned(User owner) {
     return shareRepository.findByOwnerIdOrderByCreatedAtDesc(owner.getId()).stream()
-            .map(share -> toDto(share, owner, findUser(share.getRecipientId())))
-            .toList();
+        .map(share -> toDto(share, owner, findUser(share.getRecipientId())))
+        .toList();
   }
 
   public List<ResourceShareDto> listReceived(User recipient) {
     List<ResourceShare> shares =
-            shareRepository.findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc(recipient.getId());
+        shareRepository.findByRecipientIdAndRevokedAtIsNullOrderByCreatedAtDesc(recipient.getId());
     // Look every owner up once. Both the existence check and the DTO need the
     // owner, and this listing runs on every visit to "Shared with me", so a
     // lookup per share would mean two queries per row.
     Map<String, User> owners =
-            shares.stream()
-                    .map(ResourceShare::getOwnerId)
-                    .distinct()
-                    .map(userRepository::findById)
-                    .flatMap(Optional::stream)
-                    .collect(Collectors.toMap(User::getId, Function.identity()));
+        shares.stream()
+            .map(ResourceShare::getOwnerId)
+            .distinct()
+            .map(userRepository::findById)
+            .flatMap(Optional::stream)
+            .collect(Collectors.toMap(User::getId, Function.identity()));
     return shares.stream()
-            // Hide shares whose underlying file/folder the owner has since deleted or
-            // moved, so the recipient's list stays in sync with reality.
-            .filter(share -> targetStillExists(share, owners.get(share.getOwnerId())))
-            .map(share -> toDto(share, owners.get(share.getOwnerId()), recipient))
-            .toList();
+        // Hide shares whose underlying file/folder the owner has since deleted or
+        // moved, so the recipient's list stays in sync with reality.
+        .filter(share -> targetStillExists(share, owners.get(share.getOwnerId())))
+        .map(share -> toDto(share, owners.get(share.getOwnerId()), recipient))
+        .toList();
   }
 
   /** A share whose owner is gone counts as missing, like one whose target was deleted. */
@@ -173,9 +179,9 @@ public class ResourceShareService {
 
   public void revoke(String ownerId, String shareId) {
     ResourceShare share =
-            shareRepository
-                    .findByIdAndOwnerId(shareId, ownerId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
+        shareRepository
+            .findByIdAndOwnerId(shareId, ownerId)
+            .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
     if (share.getRevokedAt() == null) {
       share.setRevokedAt(clock.instant());
       shareRepository.save(share);
@@ -189,16 +195,16 @@ public class ResourceShareService {
    */
   public void leave(String recipientId, String shareId) {
     ResourceShare share =
-            shareRepository
-                    .findByIdAndRecipientIdAndRevokedAtIsNull(shareId, recipientId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
+        shareRepository
+            .findByIdAndRecipientIdAndRevokedAtIsNull(shareId, recipientId)
+            .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
     share.setRevokedAt(clock.instant());
     shareRepository.save(share);
   }
 
   public SharedFileResource resolveFile(
-          String shareId, User recipient, String childPath, SharePermission permission)
-          throws IOException {
+      String shareId, User recipient, String childPath, SharePermission permission)
+      throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, permission);
     if (!Files.isRegularFile(resolved.target())) {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
@@ -207,7 +213,7 @@ public class ResourceShareService {
   }
 
   public SharedFolderResource resolveFolderDownload(
-          String shareId, User recipient, String childPath) throws IOException {
+      String shareId, User recipient, String childPath) throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.DOWNLOAD);
     if (!Files.isDirectory(resolved.target())) {
       throw new ResourceNotFoundException("Shared folder", "path", childPath);
@@ -216,7 +222,7 @@ public class ResourceShareService {
   }
 
   public void editFile(String shareId, User recipient, String childPath, MultipartFile file)
-          throws IOException {
+      throws IOException {
     if (file == null || file.isEmpty()) {
       throw new IllegalArgumentException("Replacement file must not be empty");
     }
@@ -226,15 +232,15 @@ public class ResourceShareService {
     }
     long existingSize = Files.size(resolved.target());
     fileService.validateReplacementWithinQuota(
-            resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
+        resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
     try (var input = file.getInputStream();
-         FileChannel channel =
-                 FileChannel.open(
-                         resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+        FileChannel channel =
+            FileChannel.open(
+                resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
       Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
       if (Files.isSymbolicLink(resolved.target())
-              || !currentTarget.startsWith(resolved.sharedRoot())
-              || !currentTarget.startsWith(resolved.ownerRoot())) {
+          || !currentTarget.startsWith(resolved.sharedRoot())
+          || !currentTarget.startsWith(resolved.ownerRoot())) {
         throw new InvalidPathException("Shared edit target is no longer inside its share");
       }
       channel.truncate(0);
@@ -248,7 +254,7 @@ public class ResourceShareService {
    * else's shared folder.
    */
   public void uploadToShare(String shareId, User recipient, String folderPath, MultipartFile file)
-          throws IOException {
+      throws IOException {
     if (file == null || file.isEmpty()) {
       throw new IllegalArgumentException("Uploaded file must not be empty");
     }
@@ -258,12 +264,12 @@ public class ResourceShareService {
     }
     String relativeFolder = resolved.ownerRoot().relativize(resolved.target()).toString();
     fileService.uploadFile(
-            resolved.ownerRoot().toString(), relativeFolder, file, resolved.ownerQuotaMb());
+        resolved.ownerRoot().toString(), relativeFolder, file, resolved.ownerQuotaMb());
   }
 
   /** Creates a subfolder inside a folder share. Requires EDIT. */
   public void createFolderInShare(String shareId, User recipient, String parentPath, String name)
-          throws IOException {
+      throws IOException {
     validateSimpleName(name);
     ResolvedShare resolved = resolve(shareId, recipient, parentPath, SharePermission.EDIT);
     if (!Files.isDirectory(resolved.target())) {
@@ -281,17 +287,16 @@ public class ResourceShareService {
   /**
    * Deletes a file or folder inside a share. Requires EDIT.
    *
-   * <p>Files are moved into the <b>owner's</b> trash, exactly as if the owner had deleted the
-   * file themselves — a recipient with EDIT access must not be able to destroy the owner's data
-   * with no recovery path. See the class-level note on folders below.
+   * <p>Files are moved into the <b>owner's</b> trash, exactly as if the owner had deleted the file
+   * themselves — a recipient with EDIT access must not be able to destroy the owner's data with no
+   * recovery path. See the class-level note on folders below.
    *
-   * <p><b>Folders are still hard-deleted here</b>, matching {@code FolderController}'s own
-   * delete endpoint for the owner's own folders: this codebase has no folder-level trash
-   * mechanism at all today ({@link TrashService#moveToTrash} only accepts a single regular
-   * file). Routing folder deletes through trash is real follow-up work — it needs a trash
-   * design that can hold a whole subtree, restore it, and account for its size against
-   * retention/quota — not a one-line change here, so it is intentionally out of scope for this
-   * fix rather than silently expanding it.
+   * <p><b>Folders are still hard-deleted here</b>, matching {@code FolderController}'s own delete
+   * endpoint for the owner's own folders: this codebase has no folder-level trash mechanism at all
+   * today ({@link TrashService#moveToTrash} only accepts a single regular file). Routing folder
+   * deletes through trash is real follow-up work — it needs a trash design that can hold a whole
+   * subtree, restore it, and account for its size against retention/quota — not a one-line change
+   * here, so it is intentionally out of scope for this fix rather than silently expanding it.
    */
   public void deleteInShare(String shareId, User recipient, String childPath) throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
@@ -306,7 +311,7 @@ public class ResourceShareService {
 
   /** Renames a file or folder inside a share, keeping its parent. Requires EDIT. */
   public void renameInShare(String shareId, User recipient, String path, String newName)
-          throws IOException {
+      throws IOException {
     validateSimpleName(newName);
     ResolvedShare resolved = resolve(shareId, recipient, path, SharePermission.EDIT);
     requireInsideShare(resolved, "The shared resource itself cannot be renamed");
@@ -316,7 +321,7 @@ public class ResourceShareService {
     }
     String relSource = resolved.ownerRoot().relativize(resolved.target()).toString();
     String relTarget =
-            resolved.ownerRoot().relativize(parent.resolve(newName).normalize()).toString();
+        resolved.ownerRoot().relativize(parent.resolve(newName).normalize()).toString();
     if (Files.isDirectory(resolved.target())) {
       folderService.renameOrMoveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
     } else {
@@ -325,55 +330,55 @@ public class ResourceShareService {
   }
 
   public List<FolderContentItemDto> listFolder(String shareId, User recipient, String childPath)
-          throws IOException {
+      throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.VIEW);
     if (!Files.isDirectory(resolved.target())) {
       throw new ResourceNotFoundException("Shared folder", "path", childPath);
     }
     try (var children = Files.list(resolved.target())) {
       return children
-              .filter(path -> !Files.isSymbolicLink(path))
-              .filter(path -> !TrashService.TRASH_DIR.equals(path.getFileName().toString()))
-              .map(
-                      path -> {
-                        try {
-                          Path real = path.toRealPath().normalize();
-                          if (!real.startsWith(resolved.target())
-                                  || !real.startsWith(resolved.ownerRoot())) {
-                            throw new InvalidPathException("Shared folder contains an invalid path");
-                          }
-                          BasicFileAttributes attributes =
-                                  Files.readAttributes(
-                                          path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-                          boolean directory = attributes.isDirectory();
-                          String relative =
-                                  resolved.target().relativize(real).toString().replace('\\', '/');
-                          String prefix = childPath == null || childPath.isBlank() ? "" : childPath + "/";
-                          return new FolderContentItemDto(
-                                  path.getFileName().toString(),
-                                  prefix + relative,
-                                  directory,
-                                  directory ? 0L : attributes.size(),
-                                  directory ? null : Files.probeContentType(path),
-                                  attributes.lastModifiedTime().toMillis());
-                        } catch (IOException exception) {
-                          throw new InvalidPathException("Unable to read shared folder entry");
-                        }
-                      })
-              .sorted(
-                      java.util.Comparator.comparing(
-                              FolderContentItemDto::getName, String.CASE_INSENSITIVE_ORDER))
-              .toList();
+          .filter(path -> !Files.isSymbolicLink(path))
+          .filter(path -> !TrashService.TRASH_DIR.equals(path.getFileName().toString()))
+          .map(
+              path -> {
+                try {
+                  Path real = path.toRealPath().normalize();
+                  if (!real.startsWith(resolved.target())
+                      || !real.startsWith(resolved.ownerRoot())) {
+                    throw new InvalidPathException("Shared folder contains an invalid path");
+                  }
+                  BasicFileAttributes attributes =
+                      Files.readAttributes(
+                          path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                  boolean directory = attributes.isDirectory();
+                  String relative =
+                      resolved.target().relativize(real).toString().replace('\\', '/');
+                  String prefix = childPath == null || childPath.isBlank() ? "" : childPath + "/";
+                  return new FolderContentItemDto(
+                      path.getFileName().toString(),
+                      prefix + relative,
+                      directory,
+                      directory ? 0L : attributes.size(),
+                      directory ? null : Files.probeContentType(path),
+                      attributes.lastModifiedTime().toMillis());
+                } catch (IOException exception) {
+                  throw new InvalidPathException("Unable to read shared folder entry");
+                }
+              })
+          .sorted(
+              java.util.Comparator.comparing(
+                  FolderContentItemDto::getName, String.CASE_INSENSITIVE_ORDER))
+          .toList();
     }
   }
 
   private ResolvedShare resolve(
-          String shareId, User recipient, String childPath, SharePermission permission)
-          throws IOException {
+      String shareId, User recipient, String childPath, SharePermission permission)
+      throws IOException {
     ResourceShare share =
-            shareRepository
-                    .findByIdAndRecipientIdAndRevokedAtIsNull(shareId, recipient.getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
+        shareRepository
+            .findByIdAndRecipientIdAndRevokedAtIsNull(shareId, recipient.getId())
+            .orElseThrow(() -> new ResourceNotFoundException("Share", "id", shareId));
     if (!share.getPermissions().contains(permission)) {
       throw new ShareAccessDeniedException("The share does not grant " + permission + " access");
     }
@@ -392,8 +397,8 @@ public class ResourceShareService {
     Path child = parseRelativePath(childPath, "shared child path");
     rejectTrashPath(child);
     if (share.getResourceType() == SharedResourceType.FILE
-            && childPath != null
-            && !childPath.isBlank()) {
+        && childPath != null
+        && !childPath.isBlank()) {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
     Path target = sharedRoot.resolve(child).normalize();
@@ -405,7 +410,7 @@ public class ResourceShareService {
       throw new ResourceNotFoundException("Shared resource", "path", childPath);
     }
     return new ResolvedShare(
-            ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb(), owner.getId());
+        ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb(), owner.getId());
   }
 
   private Path parseRelativePath(String value, String label) {
@@ -449,11 +454,11 @@ public class ResourceShareService {
       throw new InvalidPathException("Invalid name: " + name);
     }
     if (candidate.isAbsolute()
-            || candidate.getNameCount() != 1
-            || name.contains("/")
-            || name.contains("\\")
-            || ".".equals(name)
-            || "..".equals(name)) {
+        || candidate.getNameCount() != 1
+        || name.contains("/")
+        || name.contains("\\")
+        || ".".equals(name)
+        || "..".equals(name)) {
       throw new IllegalArgumentException("Invalid name: " + name);
     }
   }
@@ -468,23 +473,23 @@ public class ResourceShareService {
 
   private User findUser(String id) {
     return userRepository
-            .findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        .findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
   }
 
   private ResourceShareDto toDto(ResourceShare share, User owner, User recipient) {
     return new ResourceShareDto(
-            share.getId(),
-            owner.getUsername(),
-            recipient.getUsername(),
-            share.getDisplayName(),
-            share.getRelativePath(),
-            share.getResourceType(),
-            Set.copyOf(share.getPermissions()),
-            share.getCreatedAt(),
-            share.getRevokedAt() != null);
+        share.getId(),
+        owner.getUsername(),
+        recipient.getUsername(),
+        share.getDisplayName(),
+        share.getRelativePath(),
+        share.getResourceType(),
+        Set.copyOf(share.getPermissions()),
+        share.getCreatedAt(),
+        share.getRevokedAt() != null);
   }
 
   private record ResolvedShare(
-          Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb, String ownerId) {}
+      Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb, String ownerId) {}
 }
