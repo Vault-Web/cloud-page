@@ -278,28 +278,35 @@ class ResourceShareServiceTest {
    */
   @Test
   void deletingAFileInsideAShareMovesItToTheOwnersTrashInsteadOfHardDeleting() throws Exception {
-    Files.writeString(ownerRoot.resolve("report.pdf"), "report");
-    ResourceShare share = share("share-1", "report.pdf", SharedResourceType.FILE);
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    Files.writeString(project.resolve("report.pdf"), "report");
+
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
     share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+
     when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
         .thenReturn(Optional.of(share));
 
-    service.deleteInShare("share-1", recipient, "");
+    service.deleteInShare("share-1", recipient, "report.pdf");
 
-    assertTrue(Files.notExists(ownerRoot.resolve("report.pdf")), "gone from its original path");
+    assertTrue(Files.notExists(project.resolve("report.pdf")), "gone from its original path");
+
     Path trashDir = ownerRoot.resolve(".trash");
     assertTrue(Files.isDirectory(trashDir), "a trash directory must have been created");
+
     try (var trashedFiles = Files.list(trashDir)) {
       assertEquals(1, trashedFiles.count(), "the file must exist somewhere recoverable in trash");
     }
-    // The trash entry is recorded under the OWNER's id, not the recipient's — it is the owner's
-    // trash to see and restore from, not the recipient's.
+
     verify(trashEntryRepository, times(1))
         .save(
             org.mockito.ArgumentMatchers.argThat(
                 entry ->
                     entry.getUserId().equals("owner-1")
-                        && entry.getOriginalPath().equals("report.pdf")));
+                        && entry
+                            .getOriginalPath()
+                            .replace('\\', '/')
+                            .equals("project/report.pdf")));
   }
 
   /**
