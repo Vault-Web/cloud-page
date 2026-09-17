@@ -30,7 +30,7 @@ public class TrashController {
   @PostMapping("/{id}/restore")
   public void restore(@PathVariable String id) throws IOException {
     var user = userService.getCurrentUser();
-    trashService.restore(user.getRootFolderPath(), user.getId(), id);
+    trashService.restore(user.getRootFolderPath(), user.getId(), id, user.getStorageQuotaMb());
   }
 
   @DeleteMapping("/{id}")
