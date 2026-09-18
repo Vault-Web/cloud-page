@@ -38,12 +38,13 @@ public class FileService {
    * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
    * @throws IOException if the folder cannot be created or the file cannot be written
    * @throws InvalidPathException if the file name is missing or the destination resolves outside
-   *     the user's root directory
+   *     the user's root directory or addresses the reserved trash directory
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
   public void uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
+    rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
 
@@ -91,9 +92,12 @@ public class FileService {
    * @param relativeNewPath the relative destination path
    * @throws IOException if the file cannot be moved
    * @throws InvalidPathException if the source or destination is outside the user's root directory
+   *     or addresses the reserved trash directory
    */
   public void renameOrMoveFile(String rootPath, String relativeFilePath, String relativeNewPath)
       throws IOException {
+    rejectTrashPath(Paths.get(relativeFilePath).normalize());
+    rejectTrashPath(Paths.get(relativeNewPath).normalize());
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     Path target = Paths.get(rootPath, relativeNewPath).normalize();
     validatePath(rootPath, source);
@@ -174,6 +178,14 @@ public class FileService {
       sb.append(Character.forDigit(b & 0xF, 16));
     }
     return sb.toString();
+  }
+
+  private void rejectTrashPath(Path path) {
+    for (Path part : path) {
+      if (TrashService.TRASH_DIR.equals(part.toString())) {
+        throw new InvalidPathException("Trash files cannot be accessed directly");
+      }
+    }
   }
 
   /**
@@ -298,7 +310,7 @@ public class FileService {
   private long calculateActiveDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
 
-    Path trashPath = path.resolve(".trash");
+    Path trashPath = path.resolve(TrashService.TRASH_DIR);
     try (Stream<Path> paths = Files.walk(path)) {
       return paths
           .filter(p -> !p.startsWith(trashPath))

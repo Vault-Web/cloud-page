@@ -110,6 +110,18 @@ class FileServiceTest {
         () -> fileService.uploadFile(tempDir.toString(), "docs", file, null));
   }
 
+  @Test
+  void uploadFile_trashDestination_throwsInvalidPathException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "hidden.txt", "text/plain", "data".getBytes());
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.uploadFile(tempDir.toString(), ".trash", file, null));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
   // ── validateAdditionalStorageWithinQuota ────────────────────────────────
 
   @Test
@@ -193,6 +205,33 @@ class FileServiceTest {
     assertThrows(
         InvalidPathException.class,
         () -> fileService.renameOrMoveFile(tempDir.toString(), "safe.txt", "../../evil.txt"));
+  }
+
+  @Test
+  void renameOrMoveFile_trashDestination_throwsInvalidPathException() throws IOException {
+    Path source = Files.writeString(tempDir.resolve("safe.txt"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.renameOrMoveFile(tempDir.toString(), "safe.txt", ".trash/safe.txt"));
+
+    assertTrue(Files.exists(source));
+    assertFalse(Files.exists(tempDir.resolve(".trash/safe.txt")));
+  }
+
+  @Test
+  void renameOrMoveFile_trashSource_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path source = Files.writeString(trash.resolve("trashed-file"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () ->
+            fileService.renameOrMoveFile(
+                tempDir.toString(), ".trash/trashed-file", "restored.txt"));
+
+    assertTrue(Files.exists(source));
+    assertFalse(Files.exists(tempDir.resolve("restored.txt")));
   }
 
   // ── readFileContent ──────────────────────────────────────────────────────
