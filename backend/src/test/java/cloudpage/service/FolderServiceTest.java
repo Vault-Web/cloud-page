@@ -144,6 +144,15 @@ class FolderServiceTest {
         () -> folderService.createFolder(tempDir.toString(), "", "../../hack"));
   }
 
+  @Test
+  void createFolder_trashPath_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.createFolder(tempDir.toString(), "", ".trash"));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
   // ── deleteFolder ─────────────────────────────────────────────────────────
 
   @Test
@@ -172,6 +181,18 @@ class FolderServiceTest {
     assertThrows(
         InvalidPathException.class,
         () -> folderService.deleteFolder(tempDir.toString(), "../../etc"));
+  }
+
+  @Test
+  void deleteFolder_trashPath_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path trashedFile = Files.writeString(trash.resolve("trashed-file"), "data");
+
+    assertThrows(
+        InvalidPathException.class, () -> folderService.deleteFolder(tempDir.toString(), ".trash"));
+
+    assertTrue(Files.isDirectory(trash));
+    assertTrue(Files.exists(trashedFile));
   }
 
   // ── renameOrMoveFolder ───────────────────────────────────────────────────
@@ -204,6 +225,36 @@ class FolderServiceTest {
     assertThrows(
         InvalidPathException.class,
         () -> folderService.renameOrMoveFolder(tempDir.toString(), "safe", "../../evil"));
+  }
+
+  @Test
+  void renameOrMoveFolder_trashDestination_throwsInvalidPathException() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.renameOrMoveFolder(tempDir.toString(), "source", ".trash/source"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(trash.resolve("source")));
+  }
+
+  @Test
+  void renameOrMoveFolder_trashSource_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path source = Files.createDirectory(trash.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.renameOrMoveFolder(tempDir.toString(), ".trash/source", "restored"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(tempDir.resolve("restored")));
   }
 
   // ── validatePath ─────────────────────────────────────────────────────────

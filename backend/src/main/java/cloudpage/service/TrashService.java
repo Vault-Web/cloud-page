@@ -42,6 +42,7 @@ public class TrashService {
   private final TrashEntryRepository trashEntryRepository;
   private final UserRepository userRepository;
   private final FolderService folderService;
+  private final FileService fileService;
 
   @Value("${cloudpage.trash.retention-days:30}")
   private int retentionDays;
@@ -112,10 +113,13 @@ public class TrashService {
    * @param rootPath the root directory of the user, used as a security boundary
    * @param userId the id of the owning user
    * @param entryId the id of the trash entry to restore
+   * @param quotaMb the user's storage quota in megabytes, or {@code null} for no quota
    * @throws IOException if the file cannot be moved back
    * @throws ResourceNotFoundException if no matching trash entry exists for the user
+   * @throws IllegalArgumentException if restoring the file would exceed the storage quota
    */
-  public void restore(String rootPath, String userId, String entryId) throws IOException {
+  public void restore(String rootPath, String userId, String entryId, Long quotaMb)
+      throws IOException {
     TrashEntry entry =
         trashEntryRepository
             .findByIdAndUserId(entryId, userId)
@@ -130,6 +134,7 @@ public class TrashService {
       throw new FileAlreadyExistsException(
           "Cannot restore: a file already exists at " + entry.getOriginalPath());
     }
+    fileService.validateAdditionalStorageWithinQuota(rootPath, entry.getSizeBytes(), quotaMb);
     Files.createDirectories(target.getParent());
     Files.move(trashed, target);
 
