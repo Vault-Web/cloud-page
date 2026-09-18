@@ -64,6 +64,7 @@ public class FileService {
     if (fileName == null) {
       throw new InvalidPathException("Invalid file name: " + originalFilename);
     }
+    rejectTrashPath(fileName);
 
     Path target = folder.resolve(fileName).normalize();
     validatePath(rootPath, target);

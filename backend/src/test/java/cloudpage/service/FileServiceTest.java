@@ -122,6 +122,18 @@ class FileServiceTest {
     assertFalse(Files.exists(tempDir.resolve(".trash")));
   }
 
+  @Test
+  void uploadFile_trashFilename_throwsInvalidPathException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", ".trash", "text/plain", "data".getBytes());
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
   // ── validateAdditionalStorageWithinQuota ────────────────────────────────
 
   @Test
