@@ -204,6 +204,7 @@ public class FolderService {
 
   public Path createFolder(String rootPath, String relativeParentPath, String name)
       throws IOException {
+    rejectTrashPath(Paths.get(relativeParentPath).resolve(name).normalize());
     Path parent = Paths.get(rootPath, relativeParentPath).normalize();
     validatePath(rootPath, parent);
     Path newFolder = parent.resolve(name).normalize();
@@ -212,6 +213,7 @@ public class FolderService {
   }
 
   public void deleteFolder(String rootPath, String relativeFolderPath) throws IOException {
+    rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
 
@@ -232,6 +234,8 @@ public class FolderService {
 
   public void renameOrMoveFolder(String rootPath, String relativeFolderPath, String relativeNewPath)
       throws IOException {
+    rejectTrashPath(Paths.get(relativeFolderPath).normalize());
+    rejectTrashPath(Paths.get(relativeNewPath).normalize());
     Path source = Paths.get(rootPath, relativeFolderPath).normalize();
     Path target = Paths.get(rootPath, relativeNewPath).normalize();
     validatePath(rootPath, source);
@@ -563,6 +567,14 @@ public class FolderService {
   public void validatePath(String rootPath, Path path) throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
     resolvePathWithinRoot(rootReal, path);
+  }
+
+  private void rejectTrashPath(Path path) {
+    for (Path part : path) {
+      if (TrashService.TRASH_DIR.equals(part.toString())) {
+        throw new InvalidPathException("Trash folders cannot be accessed directly");
+      }
+    }
   }
 
   /**

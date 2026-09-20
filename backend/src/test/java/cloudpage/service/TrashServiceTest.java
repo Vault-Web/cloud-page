@@ -43,7 +43,9 @@ class TrashServiceTest {
 
   @BeforeEach
   void setUp() {
-    trashService = new TrashService(trashEntryRepository, userRepository, new FolderService());
+    trashService =
+        new TrashService(
+            trashEntryRepository, userRepository, new FolderService(), new FileService());
   }
 
   @Test
@@ -89,7 +91,7 @@ class TrashServiceTest {
     entry.setDisplayName("doc.txt");
     when(trashEntryRepository.findByIdAndUserId("abc", "user1")).thenReturn(Optional.of(entry));
 
-    trashService.restore(tempDir.toString(), "user1", "abc");
+    trashService.restore(tempDir.toString(), "user1", "abc", null);
 
     Path restored = tempDir.resolve("sub/doc.txt");
     assertTrue(Files.exists(restored), "file should be back at its original path");
@@ -103,7 +105,7 @@ class TrashServiceTest {
     when(trashEntryRepository.findByIdAndUserId(any(), any())).thenReturn(Optional.empty());
     assertThrows(
         ResourceNotFoundException.class,
-        () -> trashService.restore(tempDir.toString(), "user1", "nope"));
+        () -> trashService.restore(tempDir.toString(), "user1", "nope", null));
   }
 
   @Test
@@ -121,9 +123,51 @@ class TrashServiceTest {
 
     assertThrows(
         FileAlreadyExistsException.class,
-        () -> trashService.restore(tempDir.toString(), "user1", "abc"));
+        () -> trashService.restore(tempDir.toString(), "user1", "abc", null));
     assertEquals("current", Files.readString(tempDir.resolve("doc.txt")));
     verify(trashEntryRepository, never()).delete(any());
+  }
+
+  @Test
+  void restore_exceedsQuota_throwsAndKeepsTrashEntry() throws IOException {
+    Files.write(tempDir.resolve("active.bin"), new byte[1024 * 1024]);
+    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashed = Files.write(trashDir.resolve("abc"), new byte[] {1});
+
+    TrashEntry entry = new TrashEntry();
+    entry.setId("abc");
+    entry.setUserId("user1");
+    entry.setOriginalPath("restored.bin");
+    entry.setSizeBytes(1);
+    when(trashEntryRepository.findByIdAndUserId("abc", "user1")).thenReturn(Optional.of(entry));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> trashService.restore(tempDir.toString(), "user1", "abc", 1L));
+
+    assertTrue(Files.exists(trashed));
+    assertFalse(Files.exists(tempDir.resolve("restored.bin")));
+    verify(trashEntryRepository, never()).delete(any());
+  }
+
+  @Test
+  void restore_atQuotaLimit_restoresFile() throws IOException {
+    Files.write(tempDir.resolve("active.bin"), new byte[1024 * 1024 - 1]);
+    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Files.write(trashDir.resolve("abc"), new byte[] {1});
+
+    TrashEntry entry = new TrashEntry();
+    entry.setId("abc");
+    entry.setUserId("user1");
+    entry.setOriginalPath("restored.bin");
+    entry.setSizeBytes(1);
+    when(trashEntryRepository.findByIdAndUserId("abc", "user1")).thenReturn(Optional.of(entry));
+
+    trashService.restore(tempDir.toString(), "user1", "abc", 1L);
+
+    assertTrue(Files.exists(tempDir.resolve("restored.bin")));
+    assertFalse(Files.exists(trashDir.resolve("abc")));
+    verify(trashEntryRepository).delete(entry);
   }
 
   @Test
