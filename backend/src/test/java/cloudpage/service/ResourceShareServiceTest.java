@@ -17,6 +17,7 @@ import cloudpage.model.SharePermission;
 import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.ResourceShareRepository;
+import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,6 +42,7 @@ class ResourceShareServiceTest {
 
   @Mock private ResourceShareRepository shareRepository;
   @Mock private UserRepository userRepository;
+  @Mock private TrashEntryRepository trashEntryRepository;
 
   @TempDir Path ownerRoot;
 
@@ -50,12 +52,19 @@ class ResourceShareServiceTest {
 
   @BeforeEach
   void setUp() {
+    FolderService folderService = new FolderService();
+    // A real TrashService (not a mock) so trashing a file has the same on-disk effect it would
+    // have for a real user: the file actually moves into .trash. Only its own repository
+    // dependency is mocked, since that would otherwise need a database.
+    TrashService trashService =
+        new TrashService(trashEntryRepository, userRepository, folderService);
     service =
         new ResourceShareService(
             shareRepository,
             userRepository,
-            new FolderService(),
+            folderService,
             new FileService(),
+            trashService,
             Clock.fixed(NOW, ZoneOffset.UTC));
     owner = user("owner-1", "alice", ownerRoot);
     recipient = user("recipient-1", "bob", ownerRoot.resolve("unused"));
@@ -260,6 +269,69 @@ class ResourceShareServiceTest {
     // The guard must not block ordinary child operations.
     service.deleteInShare("share-1", recipient, "nested/notes.txt");
     assertTrue(Files.notExists(nested.resolve("notes.txt")));
+  }
+
+  /**
+   * Regression test for the bug: deleting a file inside a share used to hard-delete it via {@code
+   * fileService.deleteFile}, bypassing the owner's trash entirely and leaving the owner with no way
+   * to recover a file an EDIT-permission recipient deleted.
+   */
+  @Test
+  void deletingAFileInsideAShareMovesItToTheOwnersTrashInsteadOfHardDeleting() throws Exception {
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    Files.writeString(project.resolve("report.pdf"), "report");
+
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
+    share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    service.deleteInShare("share-1", recipient, "report.pdf");
+
+    assertTrue(Files.notExists(project.resolve("report.pdf")), "gone from its original path");
+
+    Path trashDir = ownerRoot.resolve(".trash");
+    assertTrue(Files.isDirectory(trashDir), "a trash directory must have been created");
+
+    try (var trashedFiles = Files.list(trashDir)) {
+      assertEquals(1, trashedFiles.count(), "the file must exist somewhere recoverable in trash");
+    }
+
+    verify(trashEntryRepository, times(1))
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                entry ->
+                    entry.getUserId().equals("owner-1")
+                        && entry
+                            .getOriginalPath()
+                            .replace('\\', '/')
+                            .equals("project/report.pdf")));
+  }
+
+  /**
+   * Documents current, intentional behavior rather than a gap this fix introduces: folders have no
+   * trash mechanism anywhere in this codebase yet (an owner's own folder delete via
+   * FolderController hard-deletes too), so deleting a folder inside a share still hard-deletes,
+   * consistent with what the owner's own delete does today. Building folder-level trash is
+   * separate, larger follow-up work, not something this fix silently expands into.
+   */
+  @Test
+  void deletingAFolderInsideAShareStillHardDeletes_matchingCurrentOwnerBehavior() throws Exception {
+    Path project = Files.createDirectory(ownerRoot.resolve("project"));
+    Files.createDirectory(project.resolve("subfolder"));
+    ResourceShare share = share("share-1", "project", SharedResourceType.FOLDER);
+    share.setPermissions(Set.of(SharePermission.VIEW, SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    service.deleteInShare("share-1", recipient, "subfolder");
+
+    assertTrue(Files.notExists(project.resolve("subfolder")));
+    assertTrue(
+        Files.notExists(ownerRoot.resolve(".trash")),
+        "no trash entry should be created for a folder — that mechanism does not exist yet");
+    verify(trashEntryRepository, times(0)).save(any());
   }
 
   @Test

@@ -43,6 +43,7 @@ public class ResourceShareService {
   private final UserRepository userRepository;
   private final FolderService folderService;
   private final FileService fileService;
+  private final TrashService trashService;
   private final Clock clock;
 
   @Autowired
@@ -50,8 +51,15 @@ public class ResourceShareService {
       ResourceShareRepository shareRepository,
       UserRepository userRepository,
       FolderService folderService,
-      FileService fileService) {
-    this(shareRepository, userRepository, folderService, fileService, Clock.systemUTC());
+      FileService fileService,
+      TrashService trashService) {
+    this(
+        shareRepository,
+        userRepository,
+        folderService,
+        fileService,
+        trashService,
+        Clock.systemUTC());
   }
 
   ResourceShareService(
@@ -59,11 +67,13 @@ public class ResourceShareService {
       UserRepository userRepository,
       FolderService folderService,
       FileService fileService,
+      TrashService trashService,
       Clock clock) {
     this.shareRepository = shareRepository;
     this.userRepository = userRepository;
     this.folderService = folderService;
     this.fileService = fileService;
+    this.trashService = trashService;
     this.clock = clock;
   }
 
@@ -274,6 +284,20 @@ public class ResourceShareService {
    * this way — that is the owner's resource, and the recipient's link to it is removed by revoking
    * the share, not by erasing the data.
    */
+  /**
+   * Deletes a file or folder inside a share. Requires EDIT.
+   *
+   * <p>Files are moved into the <b>owner's</b> trash, exactly as if the owner had deleted the file
+   * themselves — a recipient with EDIT access must not be able to destroy the owner's data with no
+   * recovery path. See the class-level note on folders below.
+   *
+   * <p><b>Folders are still hard-deleted here</b>, matching {@code FolderController}'s own delete
+   * endpoint for the owner's own folders: this codebase has no folder-level trash mechanism at all
+   * today ({@link TrashService#moveToTrash} only accepts a single regular file). Routing folder
+   * deletes through trash is real follow-up work — it needs a trash design that can hold a whole
+   * subtree, restore it, and account for its size against retention/quota — not a one-line change
+   * here, so it is intentionally out of scope for this fix rather than silently expanding it.
+   */
   public void deleteInShare(String shareId, User recipient, String childPath) throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
     requireInsideShare(resolved, "The shared resource itself cannot be deleted");
@@ -281,7 +305,7 @@ public class ResourceShareService {
     if (Files.isDirectory(resolved.target())) {
       folderService.deleteFolder(resolved.ownerRoot().toString(), relative);
     } else {
-      fileService.deleteFile(resolved.ownerRoot().toString(), relative);
+      trashService.moveToTrash(resolved.ownerRoot().toString(), resolved.ownerId(), relative);
     }
   }
 
@@ -385,7 +409,8 @@ public class ResourceShareService {
     if (!targetReal.startsWith(sharedRoot) || !targetReal.startsWith(ownerRoot)) {
       throw new ResourceNotFoundException("Shared resource", "path", childPath);
     }
-    return new ResolvedShare(ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb());
+    return new ResolvedShare(
+        ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb(), owner.getId());
   }
 
   private Path parseRelativePath(String value, String label) {
@@ -465,5 +490,6 @@ public class ResourceShareService {
         share.getRevokedAt() != null);
   }
 
-  private record ResolvedShare(Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb) {}
+  private record ResolvedShare(
+      Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb, String ownerId) {}
 }
