@@ -45,8 +45,9 @@ network:
 
 # Implement an Issue
 
-A maintainer labelled an issue `agent-ready` in `Vault-Web/cloud-page` — a Java
-(Spring Boot) backend with an Angular frontend. Implement it.
+A maintainer labelled an issue `agent-ready` in `Vault-Web/cloud-page` — the
+Spring Boot backend service for file and folder management. There is no frontend
+here; the Cloud user interface lives in `Vault-Web/vault-web`. Implement it.
 
 ## Before writing code
 
@@ -61,8 +62,7 @@ request.
 
 ## While implementing
 
-- Match the existing style; Spotless and Prettier run in CI and will reject
-  deviations.
+- Match the existing Java style; Spotless runs in CI and will reject deviations.
 - Add tests for the logic you add, especially anything touching authentication,
   encryption, or file access.
 - Run the relevant existing tests and the build before opening the pull request,

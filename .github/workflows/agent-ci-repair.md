@@ -90,7 +90,7 @@ further attempt requires a maintainer to apply it again deliberately.
 ## What to do
 
 Read the failing check runs and their logs. Find the actual cause — a compilation
-error, a failing test, a formatting violation that Spotless or Prettier rejects.
+error, a failing test, a formatting violation that Spotless rejects.
 
 Fix the cause, not the symptom. Do not delete or skip a failing test to make CI
 green: if a test fails because the code is wrong, fix the code. If you believe the

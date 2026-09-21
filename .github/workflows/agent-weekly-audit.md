@@ -41,8 +41,9 @@ network:
 
 # Weekly Repository Audit
 
-Audit `Vault-Web/cloud-page` — a Java (Spring Boot) backend with an Angular
-frontend — for work that is genuinely worth doing.
+Audit `Vault-Web/cloud-page` — the Spring Boot backend service for file and
+folder management — for work that is genuinely worth doing. There is no frontend
+here; the Cloud user interface lives in `Vault-Web/vault-web`.
 
 ## Before proposing anything
 
@@ -58,16 +59,30 @@ A finding that duplicates existing work is worse than no finding at all.
 
 ## What to look for
 
-- **Security** — missing authorization checks, unvalidated input, secrets in the
-  repository, unsafe defaults, weaknesses around JWT handling and the vault.
-- **Correctness** — logic that is wrong in a reachable case.
-- **Missing tests** — critical paths with no coverage, especially authentication,
-  encryption, and file access.
-- **Regressions** — behaviour that recent changes quietly broke.
-- **Configuration and CI** — weaknesses in the build or workflow setup.
+This service manages files and folders on behalf of users. The failure modes that
+actually bite here are about boundaries, state and concurrency, not about
+business logic:
 
-Repository hygiene and normalization problems count as valid findings when they
-have a concrete consequence.
+- **Ownership and path boundaries** — a user reaching a file that is not theirs:
+  path traversal, missing ownership checks, paths that escape into `.trash` or
+  outside the user's root.
+- **Sharing** — permissions on a shared resource, what happens when the owner
+  moves, renames or deletes it, links that outlive what they should, endpoints
+  reachable without the authorization they assume.
+- **Filesystem and database consistency** — an operation that writes one and not
+  the other, leaving orphaned files or rows behind.
+- **Atomicity** — a replace, move or upload that can leave a partial or corrupted
+  file when it fails halfway.
+- **Concurrency** — two operations on the same resource racing each other:
+  simultaneous uploads, an edit lost because two writers overlapped, a quota check
+  that passes twice.
+- **Quota and trash lifecycle** — storage accounting that can be bypassed or
+  double-counted, and what a file in trash costs, restores to, or silently
+  overwrites.
+- **Missing tests** on any of the above.
+
+Repository hygiene and configuration problems count when they have a concrete
+consequence.
 
 ## The hard rule
 
