@@ -1,0 +1,47 @@
+name: Generate Directory Markdown
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-directory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.VAULTWEB_AGENT_APP_ID }}
+          private-key: ${{ secrets.VAULTWEB_AGENT_APP_KEY }}
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Run Directory Tree Generator
+        uses: DenizAltunkapan/directory-tree-generator@v2
+        with:
+          path: "backend"
+          extensions: ".java,.html,.ts,.scss"
+          show-extensions: true
+
+      - name: Create or update Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          add-paths: DIRECTORY.md
+          commit-message: "Update DIRECTORY.md"
+          author: "vault-web-agents[bot] <vault-web-agents[bot]@users.noreply.github.com>"
+          committer: "vault-web-agents[bot] <vault-web-agents[bot]@users.noreply.github.com>"
+          branch: automation/directory-update
+          base: main
+          title: "Bump directory structure (auto-generated)"
+          body: "This PR updates DIRECTORY.md automatically."
+          draft: false
