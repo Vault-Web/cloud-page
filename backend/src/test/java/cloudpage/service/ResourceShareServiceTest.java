@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.exceptions.ShareAccessDeniedException;
 import cloudpage.model.ResourceShare;
@@ -186,6 +187,49 @@ class ResourceShareServiceTest {
                 "../private.txt",
                 new MockMultipartFile("file", "blocked".getBytes())));
     assertEquals("private", Files.readString(ownerRoot.resolve("private.txt")));
+  }
+
+  @Test
+  void editRejectsStaleETag() throws Exception {
+    Path target = Files.writeString(ownerRoot.resolve("notes.txt"), "before");
+    ResourceShare share = share("share-1", "notes.txt", SharedResourceType.FILE);
+    share.setPermissions(Set.of(SharePermission.EDIT));
+
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    String etag = new FileService().loadAsResource(target).getETag();
+
+    Files.writeString(target, "changed-before-edit");
+
+    assertThrows(
+        ResourceConflictException.class,
+        () ->
+            service.editFile(
+                "share-1",
+                recipient,
+                "",
+                new MockMultipartFile("file", "replacement".getBytes()),
+                etag));
+
+    assertEquals("changed-before-edit", Files.readString(target));
+  }
+
+  @Test
+  void editSucceedsWithCurrentETag() throws Exception {
+    Path target = Files.writeString(ownerRoot.resolve("notes.txt"), "before");
+    ResourceShare share = share("share-1", "notes.txt", SharedResourceType.FILE);
+    share.setPermissions(Set.of(SharePermission.EDIT));
+
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+
+    String etag = new FileService().loadAsResource(target).getETag();
+
+    service.editFile(
+        "share-1", recipient, "", new MockMultipartFile("file", "replacement".getBytes()), etag);
+
+    assertEquals("replacement", Files.readString(target));
   }
 
   @Test
