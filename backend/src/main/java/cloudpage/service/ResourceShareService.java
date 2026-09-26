@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
 /** Creates and enforces authenticated, recipient-specific file and folder grants. */
 @Service
 public class ResourceShareService {
@@ -220,57 +221,53 @@ public class ResourceShareService {
     }
     return new SharedFolderResource(resolved.ownerRoot(), resolved.target());
   }
+
   public void editFile(String shareId, User recipient, String childPath, MultipartFile file)
       throws IOException {
     editFile(shareId, recipient, childPath, file, null);
   }
+
   public void editFile(
-    String shareId,
-    User recipient,
-    String childPath,
-    MultipartFile file,
-    String expectedETag)
-    throws IOException {
-   if (file == null || file.isEmpty()) {
-    throw new IllegalArgumentException("Replacement file must not be empty");
-  }
-
-  ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
-
-   if (!Files.isRegularFile(resolved.target())) {
-      throw new ResourceNotFoundException("Shared file", "path", childPath);
-  }
-  if (expectedETag != null) {
-  String currentETag = fileService.loadAsResource(resolved.target()).getETag();
-
-  if (!expectedETag.equals(currentETag)) {
-    throw new ResourceConflictException("File has changed since it was last read");
-  }
- }
- long existingSize = Files.size(resolved.target());
-  fileService.validateReplacementWithinQuota(
-      resolved.ownerRoot().toString(),
-      existingSize,
-      file.getSize(),
-      resolved.ownerQuotaMb());
-
-  try (var input = file.getInputStream();
-      FileChannel channel =
-          FileChannel.open(
-              resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-
-    Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
-
-    if (Files.isSymbolicLink(resolved.target())
-        || !currentTarget.startsWith(resolved.sharedRoot())
-        || !currentTarget.startsWith(resolved.ownerRoot())) {
-      throw new InvalidPathException("Shared edit target is no longer inside its share");
+      String shareId, User recipient, String childPath, MultipartFile file, String expectedETag)
+      throws IOException {
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException("Replacement file must not be empty");
     }
 
-    channel.truncate(0);
-    input.transferTo(Channels.newOutputStream(channel));
+    ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
+
+    if (!Files.isRegularFile(resolved.target())) {
+      throw new ResourceNotFoundException("Shared file", "path", childPath);
+    }
+    if (expectedETag != null) {
+      String currentETag = fileService.loadAsResource(resolved.target()).getETag();
+
+      if (!expectedETag.equals(currentETag)) {
+        throw new ResourceConflictException("File has changed since it was last read");
+      }
+    }
+    long existingSize = Files.size(resolved.target());
+    fileService.validateReplacementWithinQuota(
+        resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
+
+    try (var input = file.getInputStream();
+        FileChannel channel =
+            FileChannel.open(
+                resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+
+      Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+
+      if (Files.isSymbolicLink(resolved.target())
+          || !currentTarget.startsWith(resolved.sharedRoot())
+          || !currentTarget.startsWith(resolved.ownerRoot())) {
+        throw new InvalidPathException("Shared edit target is no longer inside its share");
+      }
+
+      channel.truncate(0);
+      input.transferTo(Channels.newOutputStream(channel));
+    }
   }
-}
+
   /**
    * Adds a new file to a folder share. Requires EDIT. The file lands in the owner's storage and
    * counts against the owner's quota, so collaborators cannot fill their own space with someone

@@ -188,7 +188,8 @@ class ResourceShareServiceTest {
                 new MockMultipartFile("file", "blocked".getBytes())));
     assertEquals("private", Files.readString(ownerRoot.resolve("private.txt")));
   }
-    @Test
+
+  @Test
   void editRejectsStaleETag() throws Exception {
     Path target = Files.writeString(ownerRoot.resolve("notes.txt"), "before");
     ResourceShare share = share("share-1", "notes.txt", SharedResourceType.FILE);
@@ -226,14 +227,11 @@ class ResourceShareServiceTest {
     String etag = new FileService().loadAsResource(target).getETag();
 
     service.editFile(
-        "share-1",
-        recipient,
-        "",
-        new MockMultipartFile("file", "replacement".getBytes()),
-        etag);
+        "share-1", recipient, "", new MockMultipartFile("file", "replacement".getBytes()), etag);
 
     assertEquals("replacement", Files.readString(target));
   }
+
   @Test
   void editRespectsOwnerStorageQuota() throws Exception {
     Path target = Files.writeString(ownerRoot.resolve("notes.txt"), "before");

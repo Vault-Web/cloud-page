@@ -54,10 +54,12 @@ public class GlobalExceptionHandler {
       InvalidSecureSendPasswordException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.UNAUTHORIZED);
   }
+
   @ExceptionHandler(ResourceConflictException.class)
   public ResponseEntity<String> handleResourceConflictException(ResourceConflictException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.PRECONDITION_FAILED);
   }
+
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<String> handleIllegalArgumentException(IllegalArgumentException ex) {
     return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);

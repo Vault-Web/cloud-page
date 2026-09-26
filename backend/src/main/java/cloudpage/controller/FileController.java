@@ -44,11 +44,7 @@ public class FileController {
 
     var user = userService.getCurrentUser();
     fileService.uploadFile(
-        user.getRootFolderPath(),
-        folderPath,
-        file,
-        user.getStorageQuotaMb(),
-        ifMatch);
+        user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb(), ifMatch);
   }
 
   @GetMapping("/content")
