@@ -68,7 +68,8 @@ class FileControllerTest {
         .perform(multipart("/api/files/upload").file(file).param("folderPath", "docs"))
         .andExpect(status().isOk());
 
-    verify(fileService).uploadFile(eq(tempDir.toString()), eq("docs"), any(), any());
+    verify(fileService)
+        .uploadFile(eq(tempDir.toString()), eq("docs"), any(), any(), isNull());
   }
 
   @Test

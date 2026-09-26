@@ -3,6 +3,7 @@ package cloudpage.service;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,6 +45,16 @@ public class FileService {
   public void uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
+    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
+  }
+
+  public void uploadFile(
+      String rootPath,
+      String relativeFolderPath,
+      MultipartFile file,
+      Long quotaMb,
+      String expectedETag)
+      throws IOException {
     rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
@@ -68,6 +79,19 @@ public class FileService {
 
     Path target = folder.resolve(fileName).normalize();
     validatePath(rootPath, target);
+
+    if (expectedETag != null) {
+      if (!Files.exists(target) || !Files.isRegularFile(target)) {
+        throw new ResourceConflictException("File has changed or no longer exists");
+      }
+
+      String currentETag = loadAsResource(target).getETag();
+
+      if (!expectedETag.equals(currentETag)) {
+        throw new ResourceConflictException("File has changed since it was last read");
+      }
+    }
+
     Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
   }
 
