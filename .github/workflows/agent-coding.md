@@ -7,7 +7,15 @@ on:
     types: [labeled]
   labels: [agent-ready]
   roles: [admin, maintainer, write]
+  # The triage agent applies agent-ready through the vault-web-agents app, which
+  # has no repository role of its own.
+  bots: ["vault-web-agents[bot]"]
   reaction: rocket
+  # Throttle: never more than three open agent pull requests at a time, so
+  # review stays manageable and agents do not crowd out contributors.
+  skip-if-match:
+    query: "is:pr is:open label:agent-managed"
+    max: 3
 
 permissions:
   contents: read
@@ -28,8 +36,19 @@ tools:
     toolsets: [repos, issues, pull_requests]
     allowed-repos: ["vault-web/cloud-page"]
     min-integrity: approved
+    # Issues filed by the audit agent come from the app and must be readable.
+    trusted-users: ["vault-web-agents[bot]"]
+    # Content from outside contributors stays unreadable to this agent until a
+    # maintainer vouches for it with agent-approved. The triage agent cannot set
+    # that label, so untrusted text never reaches the agent that writes code
+    # without a human decision.
+    approval-labels: [agent-approved]
 
 safe-outputs:
+  report-failure-as-issue: false
+  github-app:
+    app-id: ${{ vars.VAULTWEB_AGENT_APP_ID }}
+    private-key: ${{ secrets.VAULTWEB_AGENT_APP_KEY }}
   create-pull-request:
     max: 1
     title-prefix: "[agent] "
@@ -48,6 +67,23 @@ network:
 A maintainer labelled an issue `agent-ready` in `Vault-Web/cloud-page` — the
 Spring Boot backend service for file and folder management. There is no frontend
 here; the Cloud user interface lives in `Vault-Web/vault-web`. Implement it.
+
+## First: make sure nobody else is working on it
+
+Contributors come first. Before doing anything else, check the issue and stop
+with a short, friendly comment instead of writing code if any of these is true:
+
+- the issue has an assignee;
+- an open pull request already references the issue;
+- someone has said in a comment that they are working on it or would like to;
+- the issue is labelled `good first issue` — those are kept for new contributors.
+
+In that case say that you are leaving the issue to them, and do not open a pull
+request.
+
+If you cannot read the issue body at all, it was written by someone outside the
+project and has not yet been approved for agents. Comment that a maintainer needs
+to add the `agent-approved` label before you can work on it, and stop.
 
 ## Before writing code
 
@@ -73,6 +109,11 @@ request.
   description instead.
 
 ## The pull request
+
+Work on a branch named `agent/issue-<number>-<short-slug>`, for example
+`agent/issue-412-fix-null-group-name`. The CI repair agent only acts on branches
+under `agent/`, so any other name means failing CI on your pull request will not
+be picked up.
 
 Open it as a **draft**. Describe what you changed, why, and anything a reviewer
 should check carefully. Link the issue. Be explicit about what you did not do and

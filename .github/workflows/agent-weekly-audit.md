@@ -30,6 +30,10 @@ tools:
     min-integrity: approved
 
 safe-outputs:
+  report-failure-as-issue: false
+  github-app:
+    app-id: ${{ vars.VAULTWEB_AGENT_APP_ID }}
+    private-key: ${{ secrets.VAULTWEB_AGENT_APP_KEY }}
   create-issue:
     max: 2
     title-prefix: "[audit] "

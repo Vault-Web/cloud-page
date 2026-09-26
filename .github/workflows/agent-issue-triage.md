@@ -43,11 +43,17 @@ tools:
     min-integrity: none
 
 safe-outputs:
+  report-failure-as-issue: false
+  # Labels are applied through the vault-web-agents app so that "agent-ready"
+  # raises a labeled event the coding agent can react to. GITHUB_TOKEN would not.
+  github-app:
+    app-id: ${{ vars.VAULTWEB_AGENT_APP_ID }}
+    private-key: ${{ secrets.VAULTWEB_AGENT_APP_KEY }}
   add-comment:
     max: 1
     target: triggering
   add-labels:
-    max: 3
+    max: 4
     allowed:
       - java
       - bug
@@ -58,6 +64,10 @@ safe-outputs:
       - question
       - duplicate
       - "good first issue"
+      - "help wanted"
+      # agent-approved is deliberately absent: only a human may vouch that an
+      # outside contributor's issue is safe to hand to the coding agent.
+      - agent-ready
 
 network:
   allowed: [defaults]
@@ -71,21 +81,42 @@ lives in `Vault-Web/vault-web`, so an issue about the UI probably belongs there.
 Many issues come from first-time contributors during Hacktoberfest and similar
 events.
 
+If the issue was opened by repository automation and starts with `[aw]`, treat it
+as agentic-workflow infrastructure, not a product bug. Do not label transient
+provider failures such as HTTP 429 as `agent-ready`; add a short comment saying
+the failed workflow should be retried and only escalate if the same workflow keeps
+failing repeatedly. For repeated deterministic workflow failures, label the issue
+`bug` and `agent-ready` only when the fix is a narrow workflow/configuration
+change.
+
 ## What to do
 
 1. **Search for duplicates.** Look through open and recently closed issues. If you
    find a genuine duplicate, link it explicitly by number.
-2. **Classify.** Apply labels from the allowed list only. Use `java` for backend work, and a type label (`bug`, `enhancement`,
-   `documentation`, `security`, `Tests`, `question`).
-3. **Identify missing information.** For a bug report, that usually means
+2. **Classify.** Apply labels from the allowed list only. Use `java` for backend
+   work, and a type label (`bug`, `enhancement`, `documentation`, `security`,
+   `Tests`, `question`).
+3. **Decide who should work on it.** Pick at most one of these:
+   - `good first issue` — small, clearly scoped, and a good way into the code
+     base. Prefer this for well-described reports from contributors.
+   - `help wanted` — worth doing but larger, or needing design judgement.
+   - `agent-ready` — a narrow, mechanical change with an unambiguous expected
+     result where no human has shown interest. Issues filed by the audit agent
+     usually fit here.
+   Leave all three off if the issue still needs information, discussion, or a
+   maintainer decision. Never use `agent-ready` for anything security-relevant,
+   for new features, or when the expected behaviour is open to interpretation.
+4. **Identify missing information.** For a bug report, that usually means
    reproduction steps, the expected versus actual behaviour, and the browser or
    environment. Ask only for what is genuinely missing and genuinely needed.
 
 ## What not to do
 
 Do not close the issue. Do not dismiss a security report as invalid — label it
-`security` and let a human judge. Do not assign anyone. Do not promise that
-anything will be implemented. Do not answer a question you are not confident about.
+`security` and let a human judge. Do not assign anyone, and never add
+`agent-ready` to an issue that already has an assignee or a linked pull request.
+Do not promise that anything will be implemented. Do not answer a question you
+are not confident about.
 
 ## How to respond
 
