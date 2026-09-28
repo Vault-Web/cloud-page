@@ -238,6 +238,8 @@ class RateLimitFilterTest {
     authenticate("bob");
 
     assertSecondRequestIsLimited(filter, "PUT", "/api/shares/share-1/edit", "UPLOAD");
+    assertSecondRequestIsLimited(filter, "POST", "/api/shares/share-1/upload", "UPLOAD");
+    assertSecondRequestIsLimited(filter, "POST", "/api/shares/share-1/folder", "UPLOAD");
     assertSecondRequestIsLimited(filter, "GET", "/api/shares/share-1/download-folder", "DOWNLOAD");
     assertSecondRequestIsLimited(filter, "GET", "/api/shares/share-1/content", "LISTING");
   }

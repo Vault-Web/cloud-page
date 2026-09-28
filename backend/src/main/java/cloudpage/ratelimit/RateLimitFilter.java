@@ -92,6 +92,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if ("PUT".equals(method) && path.matches("/api/shares/[^/]+/edit")) {
       return RateLimitCategory.UPLOAD;
     }
+    if ("POST".equals(method) && path.matches("/api/shares/[^/]+/upload")) {
+      return RateLimitCategory.UPLOAD;
+    }
+    if ("POST".equals(method) && path.matches("/api/shares/[^/]+/folder")) {
+      return RateLimitCategory.UPLOAD;
+    }
     if ("POST".equals(method) && "/api/files/scan".equals(path)) {
       return RateLimitCategory.SCAN;
     }
