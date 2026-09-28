@@ -223,29 +223,48 @@ public class ResourceShareService {
 
   public void editFile(String shareId, User recipient, String childPath, MultipartFile file)
       throws IOException {
+    editFile(shareId, recipient, childPath, file, null);
+  }
+
+  public void editFile(
+      String shareId, User recipient, String childPath, MultipartFile file, String expectedETag)
+      throws IOException {
     if (file == null || file.isEmpty()) {
       throw new IllegalArgumentException("Replacement file must not be empty");
     }
+
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
+
     if (!Files.isRegularFile(resolved.target())) {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
-    long existingSize = Files.size(resolved.target());
-    fileService.validateReplacementWithinQuota(
-        resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
-    try (var input = file.getInputStream();
-        FileChannel channel =
-            FileChannel.open(
-                resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-      Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
-      if (Files.isSymbolicLink(resolved.target())
-          || !currentTarget.startsWith(resolved.sharedRoot())
-          || !currentTarget.startsWith(resolved.ownerRoot())) {
-        throw new InvalidPathException("Shared edit target is no longer inside its share");
-      }
-      channel.truncate(0);
-      input.transferTo(Channels.newOutputStream(channel));
-    }
+
+    fileService.withEditLock(
+        resolved.target(),
+        () -> {
+          fileService.checkIfMatch(resolved.target(), expectedETag);
+          long existingSize = Files.size(resolved.target());
+          fileService.validateReplacementWithinQuota(
+              resolved.ownerRoot().toString(),
+              existingSize,
+              file.getSize(),
+              resolved.ownerQuotaMb());
+
+          try (var input = file.getInputStream();
+              FileChannel channel =
+                  FileChannel.open(
+                      resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+            Path currentTarget =
+                resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+            if (Files.isSymbolicLink(resolved.target())
+                || !currentTarget.startsWith(resolved.sharedRoot())
+                || !currentTarget.startsWith(resolved.ownerRoot())) {
+              throw new InvalidPathException("Shared edit target is no longer inside its share");
+            }
+            channel.truncate(0);
+            input.transferTo(Channels.newOutputStream(channel));
+          }
+        });
   }
 
   /**

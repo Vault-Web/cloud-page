@@ -36,10 +36,15 @@ public class FileController {
   private final TrashService trashService;
 
   @PostMapping("/upload")
-  public void uploadFile(@RequestParam String folderPath, @RequestParam MultipartFile file)
+  public void uploadFile(
+      @RequestParam String folderPath,
+      @RequestParam MultipartFile file,
+      @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch)
       throws IOException {
+
     var user = userService.getCurrentUser();
-    fileService.uploadFile(user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb());
+    fileService.uploadFile(
+        user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb(), ifMatch);
   }
 
   @GetMapping("/content")

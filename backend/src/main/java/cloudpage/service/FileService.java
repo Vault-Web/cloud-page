@@ -3,6 +3,7 @@ package cloudpage.service;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,6 +14,9 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -26,6 +30,83 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class FileService {
+  private final ConcurrentHashMap<Path, EditLock> editLocks = new ConcurrentHashMap<>();
+
+  /** A per-file lock together with the number of threads currently holding or awaiting it. */
+  private static final class EditLock {
+    private final ReentrantLock lock = new ReentrantLock();
+    private int holders;
+  }
+
+  /** A file write that runs while the target's edit lock is held. */
+  @FunctionalInterface
+  interface EditAction {
+    void run() throws IOException;
+  }
+
+  /**
+   * Runs {@code action} while holding the edit lock for {@code target}, so that a precondition
+   * check and the following write happen atomically with respect to other edits of the same file.
+   * Direct uploads and shared edits resolve the same file to the same lock even when they reach it
+   * through different (e.g. symlinked) paths. Locks are removed once no thread needs them.
+   */
+  void withEditLock(Path target, EditAction action) throws IOException {
+    Path key = editLockKey(target);
+    EditLock entry =
+        editLocks.compute(
+            key,
+            (k, existing) -> {
+              EditLock lock = existing != null ? existing : new EditLock();
+              lock.holders++;
+              return lock;
+            });
+    entry.lock.lock();
+    try {
+      action.run();
+    } finally {
+      entry.lock.unlock();
+      editLocks.compute(key, (k, lock) -> --lock.holders == 0 ? null : lock);
+    }
+  }
+
+  int activeEditLockCount() {
+    return editLocks.size();
+  }
+
+  static Path editLockKey(Path target) throws IOException {
+    Path absolute = target.toAbsolutePath().normalize();
+    Path parent = absolute.getParent();
+    if (parent == null || !Files.exists(parent)) {
+      return absolute;
+    }
+    return parent.toRealPath().resolve(absolute.getFileName());
+  }
+
+  /**
+   * Checks an {@code If-Match} header against the current state of {@code target}. A missing or
+   * blank header always passes. Otherwise the target must exist and the header must be {@code *} or
+   * contain the target's current ETag; weak ETags never match, as If-Match uses strong comparison.
+   *
+   * @throws ResourceConflictException if the precondition fails
+   */
+  void checkIfMatch(Path target, String ifMatch) throws IOException {
+    if (ifMatch == null || ifMatch.isBlank()) {
+      return;
+    }
+    if (!Files.isRegularFile(target)) {
+      throw new ResourceConflictException("File has changed or no longer exists");
+    }
+    if (ifMatch.trim().equals("*")) {
+      return;
+    }
+    String currentETag = loadAsResource(target).getETag();
+    for (String candidate : ifMatch.split(",")) {
+      if (candidate.trim().equals(currentETag)) {
+        return;
+      }
+    }
+    throw new ResourceConflictException("File has changed since it was last read");
+  }
 
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
@@ -44,6 +125,16 @@ public class FileService {
   public void uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
+    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
+  }
+
+  public void uploadFile(
+      String rootPath,
+      String relativeFolderPath,
+      MultipartFile file,
+      Long quotaMb,
+      String expectedETag)
+      throws IOException {
     rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     validatePath(rootPath, folder);
@@ -51,7 +142,6 @@ public class FileService {
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
     }
-    validateAdditionalStorageWithinQuota(rootPath, file.getSize(), quotaMb);
 
     String originalFilename = file.getOriginalFilename();
     if (originalFilename == null || originalFilename.isBlank()) {
@@ -68,7 +158,18 @@ public class FileService {
 
     Path target = folder.resolve(fileName).normalize();
     validatePath(rootPath, target);
-    Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+    withEditLock(
+        target,
+        () -> {
+          checkIfMatch(target, expectedETag);
+          if (Files.isRegularFile(target)) {
+            validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
+          } else {
+            validateAdditionalStorageWithinQuota(rootPath, file.getSize(), quotaMb);
+          }
+          Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+        });
   }
 
   /**
@@ -236,7 +337,7 @@ public class FileService {
 
   /**
    * Loads a file as a downloadable {@link Resource}, together with an ETag and last-modified
-   * timestamp derived from its size and modification time.
+   * timestamp derived from its size and modification time (at the filesystem's full precision).
    *
    * @param fullPath the path of the file to load
    * @return a {@link FileResource} wrapping the resource, its ETag, and last-modified time
@@ -252,7 +353,8 @@ public class FileService {
     Resource resource = new UrlResource(fullPath.toUri());
 
     BasicFileAttributes attrs = Files.readAttributes(fullPath, BasicFileAttributes.class);
-    String etag = "\"" + attrs.size() + "-" + attrs.lastModifiedTime().toMillis() + "\"";
+    String etag =
+        "\"" + attrs.size() + "-" + attrs.lastModifiedTime().to(TimeUnit.NANOSECONDS) + "\"";
 
     long lastModified = attrs.lastModifiedTime().toMillis();
 
