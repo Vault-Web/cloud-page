@@ -14,6 +14,8 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -27,6 +29,12 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class FileService {
+  private final ConcurrentHashMap<Path, ReentrantLock> editLocks = new ConcurrentHashMap<>();
+
+  ReentrantLock getEditLock(Path target) {
+    return editLocks.computeIfAbsent(
+        target.toAbsolutePath().normalize(), key -> new ReentrantLock());
+  }
 
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
@@ -80,19 +88,25 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     validatePath(rootPath, target);
 
-    if (expectedETag != null) {
-      if (!Files.exists(target) || !Files.isRegularFile(target)) {
-        throw new ResourceConflictException("File has changed or no longer exists");
+    ReentrantLock editLock = getEditLock(target);
+    editLock.lock();
+    try {
+      if (expectedETag != null) {
+        if (!Files.exists(target) || !Files.isRegularFile(target)) {
+          throw new ResourceConflictException("File has changed or no longer exists");
+        }
+
+        String currentETag = loadAsResource(target).getETag();
+
+        if (!expectedETag.equals(currentETag)) {
+          throw new ResourceConflictException("File has changed since it was last read");
+        }
       }
 
-      String currentETag = loadAsResource(target).getETag();
-
-      if (!expectedETag.equals(currentETag)) {
-        throw new ResourceConflictException("File has changed since it was last read");
-      }
+      Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+    } finally {
+      editLock.unlock();
     }
-
-    Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
   }
 
   /**

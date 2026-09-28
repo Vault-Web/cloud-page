@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -62,6 +63,46 @@ class FileServiceTest {
     fileService.uploadFile(tempDir.toString(), "docs", file, null);
 
     assertEquals("new content", Files.readString(dir.resolve("file.txt")));
+  }
+
+  @Test
+  void uploadFile_currentETag_succeeds() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String currentETag = fileService.loadAsResource(target).getETag();
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "", file, null, currentETag);
+
+    assertEquals("new content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_staleETag_throwsResourceConflictException() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String staleETag = fileService.loadAsResource(target).getETag();
+
+    Files.writeString(target, "changed content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, staleETag));
+
+    assertEquals("changed content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_expectedETag_targetMissing_throwsResourceConflictException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "missing.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "\"missing-etag\""));
   }
 
   @Test

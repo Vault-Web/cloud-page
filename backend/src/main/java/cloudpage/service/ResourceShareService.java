@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -239,32 +240,39 @@ public class ResourceShareService {
     if (!Files.isRegularFile(resolved.target())) {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
-    if (expectedETag != null) {
-      String currentETag = fileService.loadAsResource(resolved.target()).getETag();
 
-      if (!expectedETag.equals(currentETag)) {
-        throw new ResourceConflictException("File has changed since it was last read");
+    ReentrantLock editLock = fileService.getEditLock(resolved.target());
+    editLock.lock();
+    try {
+      if (expectedETag != null) {
+        String currentETag = fileService.loadAsResource(resolved.target()).getETag();
+
+        if (!expectedETag.equals(currentETag)) {
+          throw new ResourceConflictException("File has changed since it was last read");
+        }
       }
-    }
-    long existingSize = Files.size(resolved.target());
-    fileService.validateReplacementWithinQuota(
-        resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
+      long existingSize = Files.size(resolved.target());
+      fileService.validateReplacementWithinQuota(
+          resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
 
-    try (var input = file.getInputStream();
-        FileChannel channel =
-            FileChannel.open(
-                resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+      try (var input = file.getInputStream();
+          FileChannel channel =
+              FileChannel.open(
+                  resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 
-      Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+        Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
 
-      if (Files.isSymbolicLink(resolved.target())
-          || !currentTarget.startsWith(resolved.sharedRoot())
-          || !currentTarget.startsWith(resolved.ownerRoot())) {
-        throw new InvalidPathException("Shared edit target is no longer inside its share");
+        if (Files.isSymbolicLink(resolved.target())
+            || !currentTarget.startsWith(resolved.sharedRoot())
+            || !currentTarget.startsWith(resolved.ownerRoot())) {
+          throw new InvalidPathException("Shared edit target is no longer inside its share");
+        }
+
+        channel.truncate(0);
+        input.transferTo(Channels.newOutputStream(channel));
       }
-
-      channel.truncate(0);
-      input.transferTo(Channels.newOutputStream(channel));
+    } finally {
+      editLock.unlock();
     }
   }
 

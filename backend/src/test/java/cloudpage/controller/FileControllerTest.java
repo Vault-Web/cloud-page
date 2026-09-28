@@ -9,6 +9,7 @@ import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.model.User;
 import cloudpage.ratelimit.RateLimitFilter;
 import cloudpage.security.JwtAuthFilter;
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -76,6 +78,24 @@ class FileControllerTest {
     mockMvc
         .perform(multipart("/api/files/upload").param("folderPath", "docs"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void uploadFile_staleETag_returns412() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "test.txt", "text/plain", "content".getBytes());
+
+    doThrow(new ResourceConflictException("File has changed since it was last read"))
+        .when(fileService)
+        .uploadFile(eq(tempDir.toString()), eq("docs"), any(), any(), eq("\"stale-etag\""));
+
+    mockMvc
+        .perform(
+            multipart("/api/files/upload")
+                .file(file)
+                .param("folderPath", "docs")
+                .header(HttpHeaders.IF_MATCH, "\"stale-etag\""))
+        .andExpect(status().isPreconditionFailed());
   }
 
   // ── GET /api/files/content ───────────────────────────────────────────────
