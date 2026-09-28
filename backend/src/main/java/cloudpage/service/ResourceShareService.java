@@ -5,7 +5,6 @@ import cloudpage.dto.ResourceShareDto;
 import cloudpage.dto.SharedFileResource;
 import cloudpage.dto.SharedFolderResource;
 import cloudpage.exceptions.InvalidPathException;
-import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.exceptions.ShareAccessDeniedException;
 import cloudpage.model.ResourceShare;
@@ -30,7 +29,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -241,39 +239,32 @@ public class ResourceShareService {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
 
-    ReentrantLock editLock = fileService.getEditLock(resolved.target());
-    editLock.lock();
-    try {
-      if (expectedETag != null) {
-        String currentETag = fileService.loadAsResource(resolved.target()).getETag();
+    fileService.withEditLock(
+        resolved.target(),
+        () -> {
+          fileService.checkIfMatch(resolved.target(), expectedETag);
+          long existingSize = Files.size(resolved.target());
+          fileService.validateReplacementWithinQuota(
+              resolved.ownerRoot().toString(),
+              existingSize,
+              file.getSize(),
+              resolved.ownerQuotaMb());
 
-        if (!expectedETag.equals(currentETag)) {
-          throw new ResourceConflictException("File has changed since it was last read");
-        }
-      }
-      long existingSize = Files.size(resolved.target());
-      fileService.validateReplacementWithinQuota(
-          resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
-
-      try (var input = file.getInputStream();
-          FileChannel channel =
-              FileChannel.open(
-                  resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-
-        Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
-
-        if (Files.isSymbolicLink(resolved.target())
-            || !currentTarget.startsWith(resolved.sharedRoot())
-            || !currentTarget.startsWith(resolved.ownerRoot())) {
-          throw new InvalidPathException("Shared edit target is no longer inside its share");
-        }
-
-        channel.truncate(0);
-        input.transferTo(Channels.newOutputStream(channel));
-      }
-    } finally {
-      editLock.unlock();
-    }
+          try (var input = file.getInputStream();
+              FileChannel channel =
+                  FileChannel.open(
+                      resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+            Path currentTarget =
+                resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+            if (Files.isSymbolicLink(resolved.target())
+                || !currentTarget.startsWith(resolved.sharedRoot())
+                || !currentTarget.startsWith(resolved.ownerRoot())) {
+              throw new InvalidPathException("Shared edit target is no longer inside its share");
+            }
+            channel.truncate(0);
+            input.transferTo(Channels.newOutputStream(channel));
+          }
+        });
   }
 
   /**
