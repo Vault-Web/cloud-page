@@ -46,7 +46,9 @@ public class SecurityConfig {
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     String[] permittedPatterns =
-        PublicPaths.PREFIXES.stream().map(prefix -> prefix + "**").toArray(String[]::new);
+        PublicPaths.PREFIXES.stream()
+            .map(prefix -> prefix.endsWith("/") ? prefix + "**" : prefix + "*/**")
+            .toArray(String[]::new);
 
     http.cors(withDefaults())
         .csrf(csrf -> csrf.disable())
