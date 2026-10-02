@@ -5,6 +5,7 @@ import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.FileUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -137,7 +138,7 @@ public class FileService {
       throws IOException {
     rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
-    validatePath(rootPath, folder);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, folder);
 
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
@@ -157,7 +158,7 @@ public class FileService {
     rejectTrashPath(fileName);
 
     Path target = folder.resolve(fileName).normalize();
-    validatePath(rootPath, target);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, target);
 
     withEditLock(
         target,
@@ -182,7 +183,7 @@ public class FileService {
    */
   public void deleteFile(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, file);
     Files.deleteIfExists(file);
   }
 
@@ -202,8 +203,8 @@ public class FileService {
     rejectTrashPath(Paths.get(relativeNewPath).normalize());
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     Path target = Paths.get(rootPath, relativeNewPath).normalize();
-    validatePath(rootPath, source);
-    validatePath(rootPath, target.getParent());
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, source);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, target.getParent());
     Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
   }
 
@@ -219,7 +220,7 @@ public class FileService {
    */
   public String readFileContent(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", file.toString());
@@ -244,7 +245,7 @@ public class FileService {
    */
   public String calculateChecksum(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtil.validateAndResolvePathWithinRoot(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
@@ -287,51 +288,6 @@ public class FileService {
       if (TrashService.TRASH_DIR.equals(part.toString())) {
         throw new InvalidPathException("Trash files cannot be accessed directly");
       }
-    }
-  }
-
-  /**
-   * Validates that a path stays within the user's root directory, guarding against path traversal.
-   * Existing paths are resolved through symbolic links; for a non-existent path the existing parent
-   * directory is resolved instead so the intended location can still be checked.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param path the path to validate
-   * @throws IOException if the real path cannot be resolved
-   * @throws InvalidPathException if the path resolves outside the user's root directory
-   */
-  private void validatePath(String rootPath, Path path) throws IOException {
-    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path pathReal;
-
-    // If path exists, resolve symlinks to get the real path
-    if (Files.exists(path)) {
-      pathReal = path.toRealPath().normalize();
-    } else {
-      // For non-existent paths, resolve the parent if it exists
-      Path parent = path.getParent();
-      if (parent != null && Files.exists(parent)) {
-        Path parentReal = parent.toRealPath().normalize();
-        // Check if the resolved parent is within root
-        if (!parentReal.startsWith(rootReal)) {
-          throw new InvalidPathException("Path traversal attempt detected: " + path);
-        }
-        // Construct the child path from the resolved parent
-        Path fileName = path.getFileName();
-        if (fileName != null) {
-          pathReal = parentReal.resolve(fileName).normalize();
-        } else {
-          pathReal = parentReal;
-        }
-      } else {
-        // Parent doesn't exist or is null, validate using absolute path
-        // This is a fallback for edge cases
-        pathReal = path.toAbsolutePath().normalize();
-      }
-    }
-
-    if (!pathReal.startsWith(rootReal)) {
-      throw new InvalidPathException("Path traversal attempt detected: " + path);
     }
   }
 
