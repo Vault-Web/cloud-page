@@ -13,6 +13,7 @@ import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.ResourceShareRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -98,7 +99,7 @@ public class ResourceShareService {
     Path requested = parseRelativePath(path, "resource path");
     rejectTrashPath(requested);
     Path target = rootReal.resolve(requested).normalize();
-    folderService.validatePath(rootReal.toString(), target);
+    FileUtils.validatePath(rootReal.toString(), target);
     if (!Files.exists(target)) {
       throw new ResourceNotFoundException("Resource", "Path", path);
     }
@@ -342,9 +343,9 @@ public class ResourceShareService {
     String relTarget =
         resolved.ownerRoot().relativize(parent.resolve(newName).normalize()).toString();
     if (Files.isDirectory(resolved.target())) {
-      folderService.renameOrMoveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
+      folderService.moveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
     } else {
-      fileService.renameOrMoveFile(resolved.ownerRoot().toString(), relSource, relTarget);
+      fileService.moveFile(resolved.ownerRoot().toString(), relSource, relTarget);
     }
   }
 

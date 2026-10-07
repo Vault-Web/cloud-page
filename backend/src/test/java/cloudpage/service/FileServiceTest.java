@@ -257,65 +257,13 @@ class FileServiceTest {
     assertFalse(Files.exists(tempDir.resolve(".trash")));
   }
 
-  // ── validateAdditionalStorageWithinQuota ────────────────────────────────
-
-  @Test
-  void validateAdditionalStorageWithinQuota_exceedsQuota_throwsIllegalArgumentException()
-      throws IOException {
-    Files.write(tempDir.resolve("existing.txt"), new byte[1024 * 1024]);
-
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
-  }
-
-  @Test
-  void validateAdditionalStorageWithinQuota_atQuotaLimit_doesNotThrow() throws IOException {
-    Files.write(tempDir.resolve("existing.txt"), new byte[1024 * 1024 - 1]);
-
-    assertDoesNotThrow(
-        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
-  }
-
-  @Test
-  void validateAdditionalStorageWithinQuota_ignoresTrashFiles() throws IOException {
-    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
-    Files.write(trash.resolve("deleted.txt"), new byte[1024 * 1024]);
-
-    assertDoesNotThrow(
-        () -> fileService.validateAdditionalStorageWithinQuota(tempDir.toString(), 1, 1L));
-  }
-
-  // ── deleteFile ───────────────────────────────────────────────────────────
-
-  @Test
-  void deleteFile_existingFile_deletesSuccessfully() throws IOException {
-    Path file = Files.writeString(tempDir.resolve("toDelete.txt"), "bye");
-
-    fileService.deleteFile(tempDir.toString(), "toDelete.txt");
-
-    assertFalse(Files.exists(file));
-  }
-
-  @Test
-  void deleteFile_nonExistentFile_doesNotThrow() {
-    assertDoesNotThrow(() -> fileService.deleteFile(tempDir.toString(), "ghost.txt"));
-  }
-
-  @Test
-  void deleteFile_pathTraversal_throwsInvalidPathException() {
-    assertThrows(
-        InvalidPathException.class,
-        () -> fileService.deleteFile(tempDir.toString(), "../../etc/passwd"));
-  }
-
   // ── renameOrMoveFile ─────────────────────────────────────────────────────
 
   @Test
   void renameOrMoveFile_renameInSameFolder() throws IOException {
     Files.writeString(tempDir.resolve("old.txt"), "data");
 
-    fileService.renameOrMoveFile(tempDir.toString(), "old.txt", "new.txt");
+    fileService.moveFile(tempDir.toString(), "old.txt", "new.txt");
 
     assertFalse(Files.exists(tempDir.resolve("old.txt")));
     assertTrue(Files.exists(tempDir.resolve("new.txt")));
@@ -323,47 +271,45 @@ class FileServiceTest {
   }
 
   @Test
-  void renameOrMoveFile_moveToDifferentFolder() throws IOException {
+  void moveToDifferentFolder() throws IOException {
     Files.writeString(tempDir.resolve("moveme.txt"), "data");
     Files.createDirectory(tempDir.resolve("subfolder"));
 
-    fileService.renameOrMoveFile(tempDir.toString(), "moveme.txt", "subfolder/moveme.txt");
+    fileService.moveFile(tempDir.toString(), "moveme.txt", "subfolder/moveme.txt");
 
     assertFalse(Files.exists(tempDir.resolve("moveme.txt")));
     assertTrue(Files.exists(tempDir.resolve("subfolder/moveme.txt")));
   }
 
   @Test
-  void renameOrMoveFile_pathTraversal_throwsInvalidPathException() throws IOException {
+  void moveFile_pathTraversal_throwsInvalidPathException() throws IOException {
     Files.writeString(tempDir.resolve("safe.txt"), "data");
 
     assertThrows(
         InvalidPathException.class,
-        () -> fileService.renameOrMoveFile(tempDir.toString(), "safe.txt", "../../evil.txt"));
+        () -> fileService.moveFile(tempDir.toString(), "safe.txt", "../../evil.txt"));
   }
 
   @Test
-  void renameOrMoveFile_trashDestination_throwsInvalidPathException() throws IOException {
+  void moveFile_trashDestination_throwsInvalidPathException() throws IOException {
     Path source = Files.writeString(tempDir.resolve("safe.txt"), "data");
 
     assertThrows(
         InvalidPathException.class,
-        () -> fileService.renameOrMoveFile(tempDir.toString(), "safe.txt", ".trash/safe.txt"));
+        () -> fileService.moveFile(tempDir.toString(), "safe.txt", ".trash/safe.txt"));
 
     assertTrue(Files.exists(source));
     assertFalse(Files.exists(tempDir.resolve(".trash/safe.txt")));
   }
 
   @Test
-  void renameOrMoveFile_trashSource_throwsInvalidPathException() throws IOException {
+  void moveFile_trashSource_throwsInvalidPathException() throws IOException {
     Path trash = Files.createDirectory(tempDir.resolve(".trash"));
     Path source = Files.writeString(trash.resolve("trashed-file"), "data");
 
     assertThrows(
         InvalidPathException.class,
-        () ->
-            fileService.renameOrMoveFile(
-                tempDir.toString(), ".trash/trashed-file", "restored.txt"));
+        () -> fileService.moveFile(tempDir.toString(), ".trash/trashed-file", "restored.txt"));
 
     assertTrue(Files.exists(source));
     assertFalse(Files.exists(tempDir.resolve("restored.txt")));

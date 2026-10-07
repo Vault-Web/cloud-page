@@ -123,7 +123,7 @@ public class FolderController {
       @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
       throws IOException {
     var user = userService.getCurrentUser();
-    folderService.renameOrMoveFolder(user.getRootFolderPath(), folderPath, newPath);
+    folderService.moveFolder(user.getRootFolderPath(), folderPath, newPath);
     return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 

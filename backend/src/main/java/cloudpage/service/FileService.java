@@ -5,6 +5,7 @@ import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -17,7 +18,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Stream;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -135,9 +135,9 @@ public class FileService {
       Long quotaMb,
       String expectedETag)
       throws IOException {
-    rejectTrashPath(Paths.get(relativeFolderPath).normalize());
+    FileUtils.rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
 
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
@@ -154,10 +154,10 @@ public class FileService {
     if (fileName == null) {
       throw new InvalidPathException("Invalid file name: " + originalFilename);
     }
-    rejectTrashPath(fileName);
+    FileUtils.rejectTrashPath(fileName);
 
     Path target = folder.resolve(fileName).normalize();
-    validatePath(rootPath, target);
+    FileUtils.validatePath(rootPath, target);
 
     withEditLock(
         target,
@@ -166,60 +166,22 @@ public class FileService {
           if (Files.isRegularFile(target)) {
             validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
           } else {
-            validateAdditionalStorageWithinQuota(rootPath, file.getSize(), quotaMb);
+            FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
           }
           Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         });
   }
 
-  /**
-   * Deletes a file if it exists. Does nothing if the file is already absent.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to delete
-   * @throws IOException if the file cannot be deleted
-   * @throws InvalidPathException if the file is outside the user's root directory
-   */
-  public void deleteFile(String rootPath, String relativeFilePath) throws IOException {
-    Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
-    Files.deleteIfExists(file);
-  }
-
-  /**
-   * Renames or moves a file to a new location, overwriting any existing file at the destination.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to move
-   * @param relativeNewPath the relative destination path
-   * @throws IOException if the file cannot be moved
-   * @throws InvalidPathException if the source or destination is outside the user's root directory
-   *     or addresses the reserved trash directory
-   */
-  public void renameOrMoveFile(String rootPath, String relativeFilePath, String relativeNewPath)
+  public void moveFile(String rootPath, String relativeSourcePath, String relativeDestinationPath)
       throws IOException {
-    rejectTrashPath(Paths.get(relativeFilePath).normalize());
-    rejectTrashPath(Paths.get(relativeNewPath).normalize());
-    Path source = Paths.get(rootPath, relativeFilePath).normalize();
-    Path target = Paths.get(rootPath, relativeNewPath).normalize();
-    validatePath(rootPath, source);
-    validatePath(rootPath, target.getParent());
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    FileUtils.rejectTrashPath(Paths.get(relativeSourcePath).normalize());
+    FileUtils.rejectTrashPath(Paths.get(relativeDestinationPath).normalize());
+    FileUtils.move(rootPath, relativeSourcePath, relativeDestinationPath);
   }
 
-  /**
-   * Reads the entire textual content of a file.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to read
-   * @return the file content as a string
-   * @throws IOException if the file cannot be read
-   * @throws InvalidPathException if the file is outside the user's root directory
-   * @throws ResourceNotFoundException if the file does not exist or is not a regular file
-   */
   public String readFileContent(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtils.validatePath(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", file.toString());
@@ -244,7 +206,7 @@ public class FileService {
    */
   public String calculateChecksum(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtils.validatePath(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
@@ -282,59 +244,6 @@ public class FileService {
     return sb.toString();
   }
 
-  private void rejectTrashPath(Path path) {
-    for (Path part : path) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
-        throw new InvalidPathException("Trash files cannot be accessed directly");
-      }
-    }
-  }
-
-  /**
-   * Validates that a path stays within the user's root directory, guarding against path traversal.
-   * Existing paths are resolved through symbolic links; for a non-existent path the existing parent
-   * directory is resolved instead so the intended location can still be checked.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param path the path to validate
-   * @throws IOException if the real path cannot be resolved
-   * @throws InvalidPathException if the path resolves outside the user's root directory
-   */
-  private void validatePath(String rootPath, Path path) throws IOException {
-    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path pathReal;
-
-    // If path exists, resolve symlinks to get the real path
-    if (Files.exists(path)) {
-      pathReal = path.toRealPath().normalize();
-    } else {
-      // For non-existent paths, resolve the parent if it exists
-      Path parent = path.getParent();
-      if (parent != null && Files.exists(parent)) {
-        Path parentReal = parent.toRealPath().normalize();
-        // Check if the resolved parent is within root
-        if (!parentReal.startsWith(rootReal)) {
-          throw new InvalidPathException("Path traversal attempt detected: " + path);
-        }
-        // Construct the child path from the resolved parent
-        Path fileName = path.getFileName();
-        if (fileName != null) {
-          pathReal = parentReal.resolve(fileName).normalize();
-        } else {
-          pathReal = parentReal;
-        }
-      } else {
-        // Parent doesn't exist or is null, validate using absolute path
-        // This is a fallback for edge cases
-        pathReal = path.toAbsolutePath().normalize();
-      }
-    }
-
-    if (!pathReal.startsWith(rootReal)) {
-      throw new InvalidPathException("Path traversal attempt detected: " + path);
-    }
-  }
-
   /**
    * Loads a file as a downloadable {@link Resource}, together with an ETag and last-modified
    * timestamp derived from its size and modification time (at the filesystem's full precision).
@@ -368,65 +277,13 @@ public class FileService {
     if (quotaMb == null) {
       return;
     }
-    long currentSize = calculateActiveDirectorySize(Paths.get(rootPath));
+    long currentSize = FileUtils.calculateDirectorySize(Paths.get(rootPath));
     long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
     long projectedSize = Math.subtractExact(currentSize, existingFileSize);
     projectedSize = Math.addExact(projectedSize, replacementSize);
     if (projectedSize > quotaBytes) {
       throw new IllegalArgumentException(
           "Edit rejected: storage limit of " + quotaMb + " MB would be exceeded");
-    }
-  }
-
-  /**
-   * Ensures that adding bytes to active storage would not exceed the owner's storage quota.
-   *
-   * @param rootPath the root directory of the user
-   * @param additionalBytes the number of bytes to add to active storage
-   * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
-   * @throws IOException if the directory tree cannot be traversed
-   * @throws IllegalArgumentException if the additional storage would exceed the quota
-   */
-  public void validateAdditionalStorageWithinQuota(
-      String rootPath, long additionalBytes, Long quotaMb) throws IOException {
-    if (quotaMb == null) {
-      return;
-    }
-
-    long currentSize = calculateActiveDirectorySize(Paths.get(rootPath));
-    long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
-    long projectedSize = Math.addExact(currentSize, additionalBytes);
-    if (projectedSize > quotaBytes) {
-      throw new IllegalArgumentException("Storage limit of " + quotaMb + " MB would be exceeded");
-    }
-  }
-
-  /**
-   * Calculates active storage usage by recursively summing regular files outside the root's {@code
-   * .trash} directory. Files whose size cannot be read are skipped.
-   *
-   * @param path the directory to measure
-   * @return the total size in bytes of all regular files under {@code path}, or {@code 0} if the
-   *     path does not exist
-   * @throws IOException if the directory tree cannot be traversed
-   */
-  private long calculateActiveDirectorySize(Path path) throws IOException {
-    if (!Files.exists(path)) return 0;
-
-    Path trashPath = path.resolve(TrashService.TRASH_DIR);
-    try (Stream<Path> paths = Files.walk(path)) {
-      return paths
-          .filter(p -> !p.startsWith(trashPath))
-          .filter(Files::isRegularFile)
-          .mapToLong(
-              p -> {
-                try {
-                  return Files.size(p);
-                } catch (IOException e) {
-                  return 0;
-                }
-              })
-          .sum();
     }
   }
 }

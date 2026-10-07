@@ -14,6 +14,7 @@ import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.SecureSendRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -106,7 +107,7 @@ public class SecureSendService {
     }
 
     Path requested = Paths.get(owner.getRootFolderPath(), relativeFilePath).normalize();
-    folderService.validatePath(owner.getRootFolderPath(), requested);
+    FileUtils.validatePath(owner.getRootFolderPath(), requested);
     rejectTrashPath(parseChildPath(relativeFilePath));
     if (!Files.isReadable(requested)
         || !(Files.isRegularFile(requested) || Files.isDirectory(requested))) {
@@ -299,7 +300,7 @@ public class SecureSendService {
     try {
       Path rootReal = Paths.get(owner.getRootFolderPath()).toRealPath().normalize();
       Path requested = rootReal.resolve(send.getRelativeFilePath()).normalize();
-      folderService.validatePath(rootReal.toString(), requested);
+      FileUtils.validatePath(rootReal.toString(), requested);
       Path sharedRoot = requested.toRealPath().normalize();
       if (!sharedRoot.startsWith(rootReal)) {
         throw new SecureSendUnavailableException();

@@ -43,9 +43,7 @@ class TrashServiceTest {
 
   @BeforeEach
   void setUp() {
-    trashService =
-        new TrashService(
-            trashEntryRepository, userRepository, new FolderService(), new FileService());
+    trashService = new TrashService(trashEntryRepository, userRepository);
   }
 
   @Test
