@@ -724,10 +724,7 @@ class FolderServiceTest {
         folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
 
     SearchResult result =
-        results.stream()
-            .filter(r -> r.getName().equals("report.txt"))
-            .findFirst()
-            .orElseThrow();
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
 
     assertEquals("report.txt", result.getName());
     assertEquals("Documents/report.txt", result.getPath());
@@ -748,12 +745,35 @@ class FolderServiceTest {
         folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
 
     SearchResult result =
-        results.stream()
-            .filter(r -> r.getName().equals("report-link"))
-            .findFirst()
-            .orElseThrow();
+        results.stream().filter(r -> r.getName().equals("report-link")).findFirst().orElseThrow();
 
     assertEquals("report-link", result.getPath());
+  }
+
+  @Test
+  void searchInFolder_symlinkedRootAncestor_returnsRelativePath() throws IOException {
+    Path realBase = Files.createDirectory(tempDir.resolve("real-base"));
+    Path userRoot = Files.createDirectory(realBase.resolve("user-root"));
+    Path documents = Files.createDirectory(userRoot.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    Path linkedBase = tempDir.resolve("linked-base");
+
+    try {
+      Files.createSymbolicLink(linkedBase, realBase);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    Path lexicalRoot = linkedBase.resolve("user-root");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(lexicalRoot.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
+
+    assertEquals("Documents/report.txt", result.getPath());
   }
 
   @Test
