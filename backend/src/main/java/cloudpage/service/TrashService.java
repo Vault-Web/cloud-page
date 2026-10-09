@@ -37,9 +37,6 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TrashService {
 
-  /** Name of the per-user trash directory, relative to the user's root. */
-  public static final String TRASH_DIR = ".trash";
-
   private final TrashEntryRepository trashEntryRepository;
   private final UserRepository userRepository;
 
@@ -63,7 +60,7 @@ public class TrashService {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
     }
 
-    Path trashDir = Paths.get(rootPath, TRASH_DIR);
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR);
     Files.createDirectories(trashDir);
 
     String id = UUID.randomUUID().toString();
@@ -124,7 +121,7 @@ public class TrashService {
             .findByIdAndUserId(entryId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("TrashEntry", "id", entryId));
 
-    Path trashed = Paths.get(rootPath, TRASH_DIR, entry.getId()).normalize();
+    Path trashed = Paths.get(rootPath, FileUtils.TRASH_DIR, entry.getId()).normalize();
     FileUtils.validatePath(rootPath, trashed);
 
     Path target = Paths.get(rootPath, entry.getOriginalPath()).normalize();
@@ -183,7 +180,7 @@ public class TrashService {
   }
 
   private void deleteTrashFile(String rootPath, TrashEntry entry) throws IOException {
-    Path file = Paths.get(rootPath, TRASH_DIR, entry.getId()).normalize();
+    Path file = Paths.get(rootPath, FileUtils.TRASH_DIR, entry.getId()).normalize();
     FileUtils.validatePath(rootPath, file);
     Files.deleteIfExists(file);
   }

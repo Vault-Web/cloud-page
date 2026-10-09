@@ -358,7 +358,7 @@ public class ResourceShareService {
     try (var children = Files.list(resolved.target())) {
       return children
           .filter(path -> !Files.isSymbolicLink(path))
-          .filter(path -> !TrashService.TRASH_DIR.equals(path.getFileName().toString()))
+          .filter(path -> !FileUtils.TRASH_DIR.equals(path.getFileName().toString()))
           .map(
               path -> {
                 try {
@@ -485,7 +485,7 @@ public class ResourceShareService {
 
   private void rejectTrashPath(Path path) {
     for (Path part : path) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
+      if (FileUtils.TRASH_DIR.equals(part.toString())) {
         throw new InvalidPathException("Trash resources cannot be shared or accessed");
       }
     }

@@ -16,6 +16,7 @@ import cloudpage.model.TrashEntry;
 import cloudpage.model.User;
 import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -53,7 +54,7 @@ class TrashServiceTest {
     trashService.moveToTrash(tempDir.toString(), "user1", "doc.txt");
 
     assertFalse(Files.exists(tempDir.resolve("doc.txt")), "original file should be gone");
-    Path trashDir = tempDir.resolve(TrashService.TRASH_DIR);
+    Path trashDir = tempDir.resolve(FileUtils.TRASH_DIR);
     assertTrue(Files.isDirectory(trashDir));
     try (var entries = Files.list(trashDir)) {
       assertEquals(1, entries.count(), "exactly one file should live in the trash");
@@ -79,7 +80,7 @@ class TrashServiceTest {
 
   @Test
   void restore_movesFileBackToOriginalPathAndDeletesEntry() throws IOException {
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trashDir.resolve("abc"), "restored");
 
     TrashEntry entry = new TrashEntry();
@@ -108,7 +109,7 @@ class TrashServiceTest {
 
   @Test
   void restore_targetAlreadyExists_throwsAndKeepsExistingFile() throws IOException {
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trashDir.resolve("abc"), "trashed");
     // a file was recreated at the original path after deletion — restore must not overwrite it
     Files.writeString(tempDir.resolve("doc.txt"), "current");
@@ -129,7 +130,7 @@ class TrashServiceTest {
   @Test
   void restore_exceedsQuota_throwsAndKeepsTrashEntry() throws IOException {
     Files.write(tempDir.resolve("active.bin"), new byte[1024 * 1024]);
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Path trashed = Files.write(trashDir.resolve("abc"), new byte[] {1});
 
     TrashEntry entry = new TrashEntry();
@@ -151,7 +152,7 @@ class TrashServiceTest {
   @Test
   void restore_atQuotaLimit_restoresFile() throws IOException {
     Files.write(tempDir.resolve("active.bin"), new byte[1024 * 1024 - 1]);
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.write(trashDir.resolve("abc"), new byte[] {1});
 
     TrashEntry entry = new TrashEntry();
@@ -170,7 +171,7 @@ class TrashServiceTest {
 
   @Test
   void purge_deletesTrashFileAndEntry() throws IOException {
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trashDir.resolve("xyz"), "bye");
 
     TrashEntry entry = new TrashEntry();
@@ -186,7 +187,7 @@ class TrashServiceTest {
 
   @Test
   void purgeExpired_deletesExpiredFilesAndEntries() throws IOException {
-    Path trashDir = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trashDir = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trashDir.resolve("old"), "stale");
 
     TrashEntry entry = new TrashEntry();

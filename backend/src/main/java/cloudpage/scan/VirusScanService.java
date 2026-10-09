@@ -3,7 +3,6 @@ package cloudpage.scan;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.service.FolderService;
-import cloudpage.service.TrashService;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -112,7 +111,7 @@ public class VirusScanService {
   private void runScan(ScanJob job, Path folder, String rootPath) {
     job.setStatus(ScanStatus.RUNNING);
     Path rootBase = Paths.get(rootPath);
-    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
       stream
           // Do not follow symlinks: a symlink inside the root could otherwise point at (and stream

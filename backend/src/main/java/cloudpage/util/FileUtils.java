@@ -1,7 +1,6 @@
 package cloudpage.util;
 
 import cloudpage.exceptions.InvalidPathException;
-import cloudpage.service.TrashService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +10,9 @@ import java.util.stream.Stream;
 
 /** Contains utility functions for handling and processing files */
 public final class FileUtils {
+
+  /** Name of the per-user trash directory, relative to the user's root. */
+  public static final String TRASH_DIR = ".trash";
 
   private FileUtils() {
     throw new IllegalStateException("Utility class");
@@ -132,7 +134,7 @@ public final class FileUtils {
   public static long calculateDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
 
-    Path trashPath = path.resolve(TrashService.TRASH_DIR);
+    Path trashPath = path.resolve(TRASH_DIR);
     try (Stream<Path> paths = Files.walk(path)) {
       return paths
           .filter(p -> !p.startsWith(trashPath))
@@ -151,8 +153,8 @@ public final class FileUtils {
 
   public static void rejectTrashPath(Path path) {
     for (Path part : path) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
-        throw new InvalidPathException("Trash folders cannot be accessed directly");
+      if (TRASH_DIR.equals(part.toString())) {
+        throw new InvalidPathException("Trash files and folders cannot be accessed directly");
       }
     }
   }

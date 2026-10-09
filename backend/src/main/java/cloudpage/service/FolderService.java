@@ -73,7 +73,7 @@ public class FolderService {
     String lowerQuery = query.toLowerCase(Locale.ROOT);
     SearchFilter effectiveFilter = filter != null ? filter : new SearchFilter();
 
-    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
       return stream
           .filter(p -> !p.equals(folder))
@@ -280,7 +280,7 @@ public class FolderService {
     List<FolderContentItemDto> items = new ArrayList<>();
 
     try (var stream = Files.list(folder)) {
-      Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+      Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
       items =
           stream
               .filter(path -> !path.normalize().equals(trashDir))
@@ -460,7 +460,7 @@ public class FolderService {
 
     List<FolderListItemDto> subfolders = new ArrayList<>();
     List<FileDto> files = new ArrayList<>();
-    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.list(path)) {
       stream
           .filter(childPath -> !childPath.normalize().equals(trashDir))
@@ -587,7 +587,7 @@ public class FolderService {
     }
     boolean addressesTrash = false;
     for (Path part : relative) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
+      if (FileUtils.TRASH_DIR.equals(part.toString())) {
         addressesTrash = true;
         break;
       }
@@ -627,7 +627,7 @@ public class FolderService {
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
                 throws IOException {
               if (!directory.equals(folderReal)
-                  && TrashService.TRASH_DIR.equals(directory.getFileName().toString())) {
+                  && FileUtils.TRASH_DIR.equals(directory.getFileName().toString())) {
                 return FileVisitResult.SKIP_SUBTREE;
               }
               if (!directory.equals(folderReal)) {

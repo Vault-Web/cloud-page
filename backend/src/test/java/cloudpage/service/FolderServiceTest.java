@@ -10,6 +10,7 @@ import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.FileUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -913,13 +914,13 @@ class FolderServiceTest {
   void writeFolderArchive_excludesTrashDirectory() throws IOException {
     Path folder = Files.createDirectory(tempDir.resolve("files"));
     Files.writeString(folder.resolve("visible.txt"), "visible");
-    Path trash = Files.createDirectory(folder.resolve(TrashService.TRASH_DIR));
+    Path trash = Files.createDirectory(folder.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trash.resolve("deleted.txt"), "deleted");
 
     Map<String, String> entries = archiveEntries(folder);
 
     assertEquals("visible", entries.get("visible.txt"));
-    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(TrashService.TRASH_DIR)));
+    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(FileUtils.TRASH_DIR)));
   }
 
   @Test

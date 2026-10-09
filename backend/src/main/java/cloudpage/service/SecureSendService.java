@@ -223,7 +223,7 @@ public class SecureSendService {
     try (var children = Files.list(resolved.target())) {
       return children
           .filter(path -> !Files.isSymbolicLink(path))
-          .filter(path -> !TrashService.TRASH_DIR.equals(path.getFileName().toString()))
+          .filter(path -> !FileUtils.TRASH_DIR.equals(path.getFileName().toString()))
           .map(path -> toContentItem(resolved, path, childPath))
           .sorted(
               Comparator.comparing(FolderContentItemDto::getName, String.CASE_INSENSITIVE_ORDER))
@@ -339,7 +339,7 @@ public class SecureSendService {
 
   private void rejectTrashPath(Path path) {
     for (Path part : path) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
+      if (FileUtils.TRASH_DIR.equals(part.toString())) {
         throw new SecureSendUnavailableException();
       }
     }
