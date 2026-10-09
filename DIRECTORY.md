@@ -46,6 +46,7 @@
           - 📄 [GlobalExceptionHandler.java](backend/src/main/java/cloudpage/exceptions/GlobalExceptionHandler.java)
           - 📄 [InvalidPathException.java](backend/src/main/java/cloudpage/exceptions/InvalidPathException.java)
           - 📄 [InvalidSecureSendPasswordException.java](backend/src/main/java/cloudpage/exceptions/InvalidSecureSendPasswordException.java)
+          - 📄 [ResourceConflictException.java](backend/src/main/java/cloudpage/exceptions/ResourceConflictException.java)
           - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
           - 📄 [SecureSendUnavailableException.java](backend/src/main/java/cloudpage/exceptions/SecureSendUnavailableException.java)
           - 📄 [ShareAccessDeniedException.java](backend/src/main/java/cloudpage/exceptions/ShareAccessDeniedException.java)
