@@ -716,6 +716,24 @@ class FolderServiceTest {
   // ── searchInFolder: metadata filters & sorting ───────────────────────────
 
   @Test
+  void searchInFolder_returnsUserRelativePath() throws IOException {
+    Path documents = Files.createDirectory(tempDir.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream()
+            .filter(r -> r.getName().equals("report.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    assertEquals("report.txt", result.getName());
+    assertEquals("Documents/report.txt", result.getPath());
+  }
+
+  @Test
   void searchInFolder_filterByTypeFile_excludesFolders() throws IOException {
     Files.writeString(tempDir.resolve("report-file.txt"), "x");
     Files.createDirectory(tempDir.resolve("report-folder"));
