@@ -734,6 +734,29 @@ class FolderServiceTest {
   }
 
   @Test
+  void searchInFolder_symlinkOutsideRoot_doesNotFailSearch() throws IOException {
+    Path target = Files.createTempFile("outside-target", ".txt");
+    Path link = tempDir.resolve("report-link");
+
+    try {
+      Files.createSymbolicLink(link, target);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream()
+            .filter(r -> r.getName().equals("report-link"))
+            .findFirst()
+            .orElseThrow();
+
+    assertEquals("report-link", result.getPath());
+  }
+
+  @Test
   void searchInFolder_filterByTypeFile_excludesFolders() throws IOException {
     Files.writeString(tempDir.resolve("report-file.txt"), "x");
     Files.createDirectory(tempDir.resolve("report-folder"));

@@ -168,8 +168,8 @@ public class FolderService {
     }
 
     try {
-      Path pathReal = resolvePathWithinRoot(rootReal, path);
-      String relativePath = toRelativePath(rootReal, pathReal);
+      Path lexicalPath = path.toAbsolutePath().normalize();
+      String relativePath = toRelativePath(rootReal, lexicalPath);
       boolean isDir = Files.isDirectory(path);
       return new SearchResult(
           name,
