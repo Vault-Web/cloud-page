@@ -137,7 +137,7 @@ class FileControllerTest {
             patch("/api/files/move").param("filePath", "old.txt").param("newPath", "renamed.txt"))
         .andExpect(status().isOk());
 
-    verify(fileService).renameOrMoveFile(tempDir.toString(), "old.txt", "renamed.txt");
+    verify(fileService).moveFile(tempDir.toString(), "old.txt", "renamed.txt");
   }
 
   // ── GET /api/files/download ──────────────────────────────────────────────
@@ -279,7 +279,6 @@ class FileControllerTest {
     Path root = Files.createDirectories(tempDir.resolve("root/nested"));
     Files.writeString(tempDir.resolve("outside.pdf"), "secret");
     testUser.setRootFolderPath(root.toString());
-    doCallRealMethod().when(folderService).validatePath(eq(root.toString()), any(Path.class));
 
     mockMvc
         .perform(get("/api/files/view").param("path", "../../outside.pdf"))
@@ -301,7 +300,6 @@ class FileControllerTest {
       org.junit.jupiter.api.Assumptions.abort("Symbolic links are not permitted");
     }
     testUser.setRootFolderPath(root.toString());
-    doCallRealMethod().when(folderService).validatePath(eq(root.toString()), any(Path.class));
 
     mockMvc
         .perform(get("/api/files/view").param("path", "linked.pdf"))

@@ -8,12 +8,15 @@ import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
 import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
+import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.FileUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -184,6 +187,14 @@ class FolderServiceTest {
   }
 
   @Test
+  void deleteFolder_rootUserFolderProvided_throwsFileDeletionException() throws IOException {
+    Path rootPath = Paths.get(tempDir.toString(), ".", "testDir");
+    Files.createFile(rootPath);
+    assertThrows(
+        FileDeletionException.class, () -> folderService.deleteFolder(rootPath.toString(), "."));
+  }
+
+  @Test
   void deleteFolder_trashPath_throwsInvalidPathException() throws IOException {
     Path trash = Files.createDirectory(tempDir.resolve(".trash"));
     Path trashedFile = Files.writeString(trash.resolve("trashed-file"), "data");
@@ -198,44 +209,44 @@ class FolderServiceTest {
   // ── renameOrMoveFolder ───────────────────────────────────────────────────
 
   @Test
-  void renameOrMoveFolder_rename_successfullyRenames() throws IOException {
+  void renameOrMoveFolderFolder_rename_successfullyRenames() throws IOException {
     Files.createDirectory(tempDir.resolve("oldName"));
 
-    folderService.renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    folderService.moveFolder(tempDir.toString(), "oldName", "newName");
 
     assertFalse(Files.exists(tempDir.resolve("oldName")));
     assertTrue(Files.isDirectory(tempDir.resolve("newName")));
   }
 
   @Test
-  void renameOrMoveFolder_moveToSubfolder() throws IOException {
+  void renameOrMoveFolder_moveFolderToSubfolder() throws IOException {
     Files.createDirectory(tempDir.resolve("source"));
     Files.createDirectory(tempDir.resolve("target"));
 
-    folderService.renameOrMoveFolder(tempDir.toString(), "source", "target/source");
+    folderService.moveFolder(tempDir.toString(), "source", "target/source");
 
     assertFalse(Files.exists(tempDir.resolve("source")));
     assertTrue(Files.isDirectory(tempDir.resolve("target/source")));
   }
 
   @Test
-  void renameOrMoveFolder_pathTraversal_throwsInvalidPathException() throws IOException {
+  void move_Folder_pathTraversal_throwsInvalidPathException() throws IOException {
     Files.createDirectory(tempDir.resolve("safe"));
 
     assertThrows(
         InvalidPathException.class,
-        () -> folderService.renameOrMoveFolder(tempDir.toString(), "safe", "../../evil"));
+        () -> folderService.moveFolder(tempDir.toString(), "safe", "../../evil"));
   }
 
   @Test
-  void renameOrMoveFolder_trashDestination_throwsInvalidPathException() throws IOException {
+  void move_Folder_trashDestination_throwsInvalidPathException() throws IOException {
     Path source = Files.createDirectory(tempDir.resolve("source"));
     Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
     Path trash = Files.createDirectory(tempDir.resolve(".trash"));
 
     assertThrows(
         InvalidPathException.class,
-        () -> folderService.renameOrMoveFolder(tempDir.toString(), "source", ".trash/source"));
+        () -> folderService.moveFolder(tempDir.toString(), "source", ".trash/source"));
 
     assertTrue(Files.isDirectory(source));
     assertTrue(Files.exists(sourceFile));
@@ -243,35 +254,32 @@ class FolderServiceTest {
   }
 
   @Test
-  void renameOrMoveFolder_trashSource_throwsInvalidPathException() throws IOException {
+  void move_Folder_trashSource_throwsInvalidPathException() throws IOException {
     Path trash = Files.createDirectory(tempDir.resolve(".trash"));
     Path source = Files.createDirectory(trash.resolve("source"));
     Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
 
     assertThrows(
         InvalidPathException.class,
-        () -> folderService.renameOrMoveFolder(tempDir.toString(), ".trash/source", "restored"));
+        () -> folderService.moveFolder(tempDir.toString(), ".trash/source", "restored"));
 
     assertTrue(Files.isDirectory(source));
     assertTrue(Files.exists(sourceFile));
     assertFalse(Files.exists(tempDir.resolve("restored")));
   }
 
-  // ── validatePath ─────────────────────────────────────────────────────────
-
   @Test
-  void validatePath_validPath_doesNotThrow() {
-    Path valid = tempDir.resolve("somefile.txt");
-
-    assertDoesNotThrow(() -> folderService.validatePath(tempDir.toString(), valid));
-  }
-
-  @Test
-  void validatePath_outsideRoot_throwsInvalidPathException() {
-    Path outside = tempDir.resolve("../../etc/passwd").normalize();
+  void move_Folder_trashSourceAtEndOfTarget_throwsInvalidPathException() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
 
     assertThrows(
-        InvalidPathException.class, () -> folderService.validatePath(tempDir.toString(), outside));
+        InvalidPathException.class,
+        () -> folderService.moveFolder(tempDir.toString(), "source", "source/.trash"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(tempDir.resolve("restored")));
   }
 
   // ── FileDto content verification ─────────────────────────────────────────
@@ -906,13 +914,13 @@ class FolderServiceTest {
   void writeFolderArchive_excludesTrashDirectory() throws IOException {
     Path folder = Files.createDirectory(tempDir.resolve("files"));
     Files.writeString(folder.resolve("visible.txt"), "visible");
-    Path trash = Files.createDirectory(folder.resolve(TrashService.TRASH_DIR));
+    Path trash = Files.createDirectory(folder.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trash.resolve("deleted.txt"), "deleted");
 
     Map<String, String> entries = archiveEntries(folder);
 
     assertEquals("visible", entries.get("visible.txt"));
-    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(TrashService.TRASH_DIR)));
+    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(FileUtils.TRASH_DIR)));
   }
 
   @Test
