@@ -62,6 +62,7 @@ public class FolderService {
       SearchFilter filter)
       throws IOException {
 
+    Path rootAbsolute = Paths.get(rootPath).toAbsolutePath().normalize();
     Path folder = Paths.get(rootPath, folderPath).normalize();
     validatePath(rootPath, folder);
 
@@ -78,7 +79,7 @@ public class FolderService {
       return stream
           .filter(p -> !p.equals(folder))
           .filter(p -> !p.startsWith(trashDir))
-          .map(p -> createSearchResult(p, lowerQuery))
+          .map(p -> createSearchResult(p, lowerQuery, rootAbsolute))
           .filter(r -> r.getScore() >= minScore)
           .filter(r -> matchesFilter(r, effectiveFilter))
           .sorted(searchComparator(effectiveFilter))
@@ -153,7 +154,7 @@ public class FolderService {
    * @return a {@link SearchResult} with the calculated similarity score
    * @throws FileNotFoundException if the file or folder metadata cannot be read
    */
-  private SearchResult createSearchResult(Path path, String query) {
+  private SearchResult createSearchResult(Path path, String query, Path rootAbsolute) {
     String name = path.getFileName().toString();
     // Locale.ROOT prevents using the system's local language for case conversion
     String lowerName = name.toLowerCase(Locale.ROOT);
@@ -167,10 +168,12 @@ public class FolderService {
     }
 
     try {
+      Path lexicalPath = path.toAbsolutePath().normalize();
+      String relativePath = toRelativePath(rootAbsolute, lexicalPath);
       boolean isDir = Files.isDirectory(path);
       return new SearchResult(
           name,
-          path.toString(),
+          relativePath,
           isDir ? "folder" : "file",
           isDir ? null : Files.size(path),
           isDir ? null : Files.probeContentType(path),

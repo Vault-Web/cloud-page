@@ -716,6 +716,67 @@ class FolderServiceTest {
   // ── searchInFolder: metadata filters & sorting ───────────────────────────
 
   @Test
+  void searchInFolder_returnsUserRelativePath() throws IOException {
+    Path documents = Files.createDirectory(tempDir.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
+
+    assertEquals("report.txt", result.getName());
+    assertEquals("Documents/report.txt", result.getPath());
+  }
+
+  @Test
+  void searchInFolder_symlinkOutsideRoot_doesNotFailSearch() throws IOException {
+    Path target = Files.createTempFile("outside-target", ".txt");
+    Path link = tempDir.resolve("report-link");
+
+    try {
+      Files.createSymbolicLink(link, target);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report-link")).findFirst().orElseThrow();
+
+    assertEquals("report-link", result.getPath());
+  }
+
+  @Test
+  void searchInFolder_symlinkedRootAncestor_returnsRelativePath() throws IOException {
+    Path realBase = Files.createDirectory(tempDir.resolve("real-base"));
+    Path userRoot = Files.createDirectory(realBase.resolve("user-root"));
+    Path documents = Files.createDirectory(userRoot.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    Path linkedBase = tempDir.resolve("linked-base");
+
+    try {
+      Files.createSymbolicLink(linkedBase, realBase);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    Path lexicalRoot = linkedBase.resolve("user-root");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(lexicalRoot.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
+
+    assertEquals("Documents/report.txt", result.getPath());
+  }
+
+  @Test
   void searchInFolder_filterByTypeFile_excludesFolders() throws IOException {
     Files.writeString(tempDir.resolve("report-file.txt"), "x");
     Files.createDirectory(tempDir.resolve("report-folder"));
