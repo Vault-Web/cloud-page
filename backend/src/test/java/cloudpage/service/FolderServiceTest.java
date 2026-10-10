@@ -8,6 +8,7 @@ import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
 import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
+import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.InvalidPathException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -181,6 +182,12 @@ class FolderServiceTest {
     assertThrows(
         InvalidPathException.class,
         () -> folderService.deleteFolder(tempDir.toString(), "../../etc"));
+  }
+
+  @Test
+  void deleteFolder_rootUserFolderProvided_throwsInvalidPathException() {
+    assertThrows(
+        FileDeletionException.class, () -> folderService.deleteFolder(tempDir.toString(), "."));
   }
 
   @Test

@@ -112,7 +112,7 @@ public class FolderController {
       @RequestParam(required = false, defaultValue = "false") boolean includeChildCounts)
       throws IOException {
     var user = userService.getCurrentUser();
-    folderService.deleteFolder(user.getRootFolderPath(), folderPath);
+    folderService.deleteFolder(user.getRootFolderPath(),user.getId(), folderPath);
     return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 

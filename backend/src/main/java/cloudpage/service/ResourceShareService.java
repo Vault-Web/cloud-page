@@ -322,7 +322,7 @@ public class ResourceShareService {
     requireInsideShare(resolved, "The shared resource itself cannot be deleted");
     String relative = resolved.ownerRoot().relativize(resolved.target()).toString();
     if (Files.isDirectory(resolved.target())) {
-      folderService.deleteFolder(resolved.ownerRoot().toString(), relative);
+      folderService.deleteFolder(resolved.ownerRoot().toString(), resolved.ownerId(), relative);
     } else {
       trashService.moveToTrash(resolved.ownerRoot().toString(), resolved.ownerId(), relative);
     }
