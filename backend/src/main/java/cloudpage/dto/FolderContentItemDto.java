@@ -15,4 +15,16 @@ public class FolderContentItemDto {
   private long size;
   private String mimeType;
   private long lastModifiedAt;
+  private boolean conflict;
+  private String originalPath;
+
+  public FolderContentItemDto(
+      String name,
+      String path,
+      boolean directory,
+      long size,
+      String mimeType,
+      long lastModifiedAt) {
+    this(name, path, directory, size, mimeType, lastModifiedAt, false, null);
+  }
 }

@@ -3,6 +3,7 @@ package cloudpage.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import cloudpage.dto.FileDto;
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
@@ -286,6 +287,49 @@ class FolderServiceTest {
     assertEquals("info.txt", tree.getFiles().get(0).getName());
     assertEquals(5, tree.getFiles().get(0).getSize());
     assertNotNull(tree.getFiles().get(0).getPath());
+  }
+
+  @Test
+  void getFolderTree_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile =
+        tree.getFiles().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_doesNotMarkSimilarNameAsSyncthingConflict() throws IOException {
+    Files.writeString(tempDir.resolve("my-sync-conflict-notes.md"), "normal");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto file = tree.getFiles().get(0);
+
+    assertFalse(file.isConflict());
+    assertNull(file.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_conflictWithoutOriginal_hasNullOriginalPath() throws IOException {
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile = tree.getFiles().get(0);
+
+    assertTrue(conflictFile.isConflict());
+    assertNull(conflictFile.getOriginalPath());
   }
 
   // ── getFolderContentPage ───────────────────────────────────────────────────
@@ -674,6 +718,27 @@ class FolderServiceTest {
     assertEquals(5, item.getSize());
     assertFalse(item.isDirectory());
     assertNotNull(item.getPath());
+  }
+
+  @Test
+  void getFolderContentPage_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+    assertNotNull(result);
+
+    FolderContentItemDto conflictFile =
+        result.getContent().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
   }
 
   @Test
