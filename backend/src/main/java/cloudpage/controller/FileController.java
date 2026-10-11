@@ -7,6 +7,7 @@ import cloudpage.service.FileService;
 import cloudpage.service.FolderService;
 import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -51,7 +52,7 @@ public class FileController {
   public ResponseEntity<String> getFileContent(@RequestParam String path) throws IOException {
     var user = userService.getCurrentUser();
     Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    folderService.validatePath(user.getRootFolderPath(), fullPath);
+    FileUtils.validatePath(user.getRootFolderPath(), fullPath);
 
     if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
       throw new FileNotFoundException("File Not Found with path : " + path);
@@ -71,14 +72,14 @@ public class FileController {
   public void renameOrMoveFile(@RequestParam String filePath, @RequestParam String newPath)
       throws IOException {
     var user = userService.getCurrentUser();
-    fileService.renameOrMoveFile(user.getRootFolderPath(), filePath, newPath);
+    fileService.moveFile(user.getRootFolderPath(), filePath, newPath);
   }
 
   @GetMapping("/download")
   public ResponseEntity<Resource> downloadFile(@RequestParam String path) throws IOException {
     var user = userService.getCurrentUser();
     Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    folderService.validatePath(user.getRootFolderPath(), fullPath); // ensure security
+    FileUtils.validatePath(user.getRootFolderPath(), fullPath); // ensure security
 
     FileResource result = fileService.loadAsResource(fullPath);
     String mimeType = Files.probeContentType(fullPath);
@@ -101,7 +102,7 @@ public class FileController {
       @RequestParam String path, @RequestHeader HttpHeaders headers) throws IOException {
     var user = userService.getCurrentUser();
     Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    folderService.validatePath(user.getRootFolderPath(), fullPath);
+    FileUtils.validatePath(user.getRootFolderPath(), fullPath);
 
     FileResource result = fileService.loadAsResource(fullPath);
     Resource resource = result.getResource();

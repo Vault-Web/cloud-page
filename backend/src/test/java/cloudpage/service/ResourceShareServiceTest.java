@@ -57,8 +57,7 @@ class ResourceShareServiceTest {
     // A real TrashService (not a mock) so trashing a file has the same on-disk effect it would
     // have for a real user: the file actually moves into .trash. Only its own repository
     // dependency is mocked, since that would otherwise need a database.
-    TrashService trashService =
-        new TrashService(trashEntryRepository, userRepository, folderService, new FileService());
+    TrashService trashService = new TrashService(trashEntryRepository, userRepository);
     service =
         new ResourceShareService(
             shareRepository,

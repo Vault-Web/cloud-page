@@ -213,7 +213,7 @@ class FolderControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("root"));
 
-    verify(folderService).renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    verify(folderService).moveFolder(tempDir.toString(), "oldName", "newName");
     verify(folderService).getFolderTree(tempDir.toString(), false);
   }
 
@@ -230,7 +230,7 @@ class FolderControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("root"));
 
-    verify(folderService).renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    verify(folderService).moveFolder(tempDir.toString(), "oldName", "newName");
     verify(folderService).getFolderTree(tempDir.toString(), true);
   }
 
@@ -238,7 +238,7 @@ class FolderControllerTest {
   void renameOrMoveFolder_pathTraversal_returns400() throws Exception {
     doThrow(new InvalidPathException("Forbidden"))
         .when(folderService)
-        .renameOrMoveFolder(eq(tempDir.toString()), eq("safe"), eq("../../evil"));
+        .moveFolder(eq(tempDir.toString()), eq("safe"), eq("../../evil"));
 
     mockMvc
         .perform(patch("/api/folders").param("folderPath", "safe").param("newPath", "../../evil"))
