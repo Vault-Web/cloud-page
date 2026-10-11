@@ -33,7 +33,7 @@ public class FolderService {
   private static final long DEFERRED_SIZE = -1L;
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
-      Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\.[^.]+)?$");
+      Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
 
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
 
@@ -324,7 +324,7 @@ public class FolderService {
                         String originalFileName = inferOriginalFileName(fileName);
                         Path originalFile = path.resolveSibling(originalFileName);
 
-                        if (Files.isRegularFile(originalFile)) {
+                        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
                           Path originalFileReal =
                               FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
                           originalPath = toRelativePath(rootReal, originalFileReal);
@@ -575,7 +575,7 @@ public class FolderService {
         String originalFileName = inferOriginalFileName(fileName);
         Path originalFile = filePath.resolveSibling(originalFileName);
 
-        if (Files.isRegularFile(originalFile)) {
+        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
           Path originalFileReal =
               FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
           originalPath = toRelativePath(rootReal, originalFileReal);
