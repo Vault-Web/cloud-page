@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -31,7 +32,27 @@ public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
 
+  private static final Pattern SYNCTHING_CONFLICT_PATTERN =
+      Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
+
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  private boolean isSyncthingConflict(String fileName) {
+    return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
+  }
+
+  private String inferOriginalFileName(String fileName) {
+    var matcher = SYNCTHING_CONFLICT_PATTERN.matcher(fileName);
+
+    if (!matcher.matches()) {
+      return null;
+    }
+
+    String baseName = matcher.group(1);
+    String extension = matcher.group(2);
+
+    return baseName + (extension != null ? extension : "");
+  }
 
   /**
    * Searches for files and folders within a given folder using the Jaro-Winkler similarity
@@ -294,6 +315,21 @@ public class FolderService {
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
+                      String fileName = path.getFileName().toString();
+                      boolean conflict = !isDirectory && isSyncthingConflict(fileName);
+
+                      String originalPath = null;
+
+                      if (conflict) {
+                        String originalFileName = inferOriginalFileName(fileName);
+                        Path originalFile = path.resolveSibling(originalFileName);
+
+                        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
+                          Path originalFileReal =
+                              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                          originalPath = toRelativePath(rootReal, originalFileReal);
+                        }
+                      }
                       long sizeValue = 0L;
                       long lastModifiedAt;
 
@@ -319,12 +355,14 @@ public class FolderService {
                       }
 
                       return new FolderContentItemDto(
-                          path.getFileName().toString(),
+                          fileName,
                           itemRelativePath,
                           isDirectory,
                           sizeValue,
                           null,
-                          lastModifiedAt);
+                          lastModifiedAt,
+                          conflict,
+                          originalPath);
                     } catch (IOException e) {
                       throw new InvalidPathException(
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
@@ -528,14 +566,32 @@ public class FolderService {
   private FileDto toFileDto(Path rootReal, Path filePath, Path filePathReal) {
     try {
       String relativePath = toRelativePath(rootReal, filePathReal);
+      String fileName = filePath.getFileName().toString();
+      boolean conflict = isSyncthingConflict(fileName);
+
+      String originalPath = null;
+
+      if (conflict) {
+        String originalFileName = inferOriginalFileName(fileName);
+        Path originalFile = filePath.resolveSibling(originalFileName);
+
+        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
+          Path originalFileReal =
+              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+          originalPath = toRelativePath(rootReal, originalFileReal);
+        }
+      }
 
       BasicFileAttributes attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
       return new FileDto(
-          filePath.getFileName().toString(),
+          fileName,
           relativePath,
           attrs.size(),
           Files.probeContentType(filePath),
-          attrs.lastModifiedTime().toMillis());
+          attrs.lastModifiedTime().toMillis(),
+          conflict,
+          originalPath);
+
     } catch (IOException e) {
       throw new FileAccessException(
           "Failed to read file attributes: " + filePath + " with exception: " + e.getMessage());

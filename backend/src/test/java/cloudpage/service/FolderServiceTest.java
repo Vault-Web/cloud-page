@@ -3,6 +3,7 @@ package cloudpage.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import cloudpage.dto.FileDto;
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,6 +60,36 @@ class FolderServiceTest {
 
     assertEquals(2, tree.getFiles().size());
     assertTrue(tree.getFolders().isEmpty());
+  }
+
+  @Test
+  void getFolderTree_conflictWithSymlinkOriginal_doesNotExposeOriginalPath() throws IOException {
+    Path outsideFile = Files.createTempFile("outside-", ".md");
+
+    try {
+      Files.writeString(outsideFile, "outside");
+
+      try {
+        Files.createSymbolicLink(tempDir.resolve("a.md"), outsideFile);
+      } catch (IOException | UnsupportedOperationException e) {
+        Assumptions.assumeTrue(false, "Symbolic links are not available");
+      }
+
+      Files.writeString(tempDir.resolve("a.sync-conflict-20261010-142530-DEV.md"), "conflict");
+
+      FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+      FileDto conflictFile =
+          tree.getFiles().stream()
+              .filter(file -> file.getName().contains(".sync-conflict-"))
+              .findFirst()
+              .orElseThrow();
+
+      assertTrue(conflictFile.isConflict());
+      assertNull(conflictFile.getOriginalPath());
+    } finally {
+      Files.deleteIfExists(outsideFile);
+    }
   }
 
   @Test
@@ -294,6 +326,49 @@ class FolderServiceTest {
     assertEquals("info.txt", tree.getFiles().get(0).getName());
     assertEquals(5, tree.getFiles().get(0).getSize());
     assertNotNull(tree.getFiles().get(0).getPath());
+  }
+
+  @Test
+  void getFolderTree_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile =
+        tree.getFiles().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_doesNotMarkSimilarNameAsSyncthingConflict() throws IOException {
+    Files.writeString(tempDir.resolve("my-sync-conflict-notes.md"), "normal");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto file = tree.getFiles().get(0);
+
+    assertFalse(file.isConflict());
+    assertNull(file.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_conflictWithoutOriginal_hasNullOriginalPath() throws IOException {
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile = tree.getFiles().get(0);
+
+    assertTrue(conflictFile.isConflict());
+    assertNull(conflictFile.getOriginalPath());
   }
 
   // ── getFolderContentPage ───────────────────────────────────────────────────
@@ -682,6 +757,79 @@ class FolderServiceTest {
     assertEquals(5, item.getSize());
     assertFalse(item.isDirectory());
     assertNotNull(item.getPath());
+  }
+
+  @Test
+  void getFolderContentPage_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+    assertNotNull(result);
+
+    FolderContentItemDto conflictFile =
+        result.getContent().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderContentPage_detectsSyncthingConflictFileWithMultipleExtensions()
+      throws IOException {
+    Files.writeString(tempDir.resolve("backup.tar.gz"), "original");
+    Files.writeString(
+        tempDir.resolve("backup.sync-conflict-20261010-142530-LAPTOP.tar.gz"), "conflict");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+    assertNotNull(result);
+
+    FolderContentItemDto conflictFile =
+        result.getContent().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("backup.tar.gz", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderContentPage_conflictWithSymlinkOriginal_doesNotExposeOriginalPath()
+      throws IOException {
+    Path outsideFile = Files.createTempFile("outside-", ".md");
+
+    try {
+      Files.writeString(outsideFile, "outside");
+      try {
+        Files.createSymbolicLink(tempDir.resolve("a.md"), outsideFile);
+      } catch (IOException | UnsupportedOperationException e) {
+        Assumptions.assumeTrue(false, "Symbolic links are not available");
+      }
+      Files.writeString(tempDir.resolve("a.sync-conflict-20261010-142530-DEV.md"), "conflict");
+
+      PageResponseDto<FolderContentItemDto> result =
+          folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+      FolderContentItemDto conflictFile =
+          result.getContent().stream()
+              .filter(file -> file.getName().contains(".sync-conflict-"))
+              .findFirst()
+              .orElseThrow();
+
+      assertTrue(conflictFile.isConflict());
+      assertNull(conflictFile.getOriginalPath());
+    } finally {
+      Files.deleteIfExists(outsideFile);
+    }
   }
 
   @Test
