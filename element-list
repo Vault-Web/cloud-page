@@ -9,3 +9,4 @@ cloudpage.repository
 cloudpage.scan
 cloudpage.security
 cloudpage.service
+cloudpage.util
