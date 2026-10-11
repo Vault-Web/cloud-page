@@ -325,7 +325,8 @@ public class FolderService {
                         Path originalFile = path.resolveSibling(originalFileName);
 
                         if (Files.isRegularFile(originalFile)) {
-                          Path originalFileReal = resolvePathWithinRoot(rootReal, originalFile);
+                          Path originalFileReal =
+                              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
                           originalPath = toRelativePath(rootReal, originalFileReal);
                         }
                       }
@@ -575,7 +576,8 @@ public class FolderService {
         Path originalFile = filePath.resolveSibling(originalFileName);
 
         if (Files.isRegularFile(originalFile)) {
-          Path originalFileReal = resolvePathWithinRoot(rootReal, originalFile);
+          Path originalFileReal =
+              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
           originalPath = toRelativePath(rootReal, originalFileReal);
         }
       }
