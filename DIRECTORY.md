@@ -46,6 +46,7 @@
           - 📄 [GlobalExceptionHandler.java](backend/src/main/java/cloudpage/exceptions/GlobalExceptionHandler.java)
           - 📄 [InvalidPathException.java](backend/src/main/java/cloudpage/exceptions/InvalidPathException.java)
           - 📄 [InvalidSecureSendPasswordException.java](backend/src/main/java/cloudpage/exceptions/InvalidSecureSendPasswordException.java)
+          - 📄 [ResourceConflictException.java](backend/src/main/java/cloudpage/exceptions/ResourceConflictException.java)
           - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
           - 📄 [SecureSendUnavailableException.java](backend/src/main/java/cloudpage/exceptions/SecureSendUnavailableException.java)
           - 📄 [ShareAccessDeniedException.java](backend/src/main/java/cloudpage/exceptions/ShareAccessDeniedException.java)
@@ -91,6 +92,8 @@
           - 📄 [SecureSendService.java](backend/src/main/java/cloudpage/service/SecureSendService.java)
           - 📄 [TrashService.java](backend/src/main/java/cloudpage/service/TrashService.java)
           - 📄 [UserService.java](backend/src/main/java/cloudpage/service/UserService.java)
+        - 📁 **util**
+          - 📄 [FileUtils.java](backend/src/main/java/cloudpage/util/FileUtils.java)
   - 📁 **test**
     - 📁 **java**
       - 📁 **cloudpage**
@@ -115,3 +118,5 @@
           - 📄 [ResourceShareServiceTest.java](backend/src/test/java/cloudpage/service/ResourceShareServiceTest.java)
           - 📄 [SecureSendServiceTest.java](backend/src/test/java/cloudpage/service/SecureSendServiceTest.java)
           - 📄 [TrashServiceTest.java](backend/src/test/java/cloudpage/service/TrashServiceTest.java)
+        - 📁 **util**
+          - 📄 [FileUtilsTest.java](backend/src/test/java/cloudpage/util/FileUtilsTest.java)
