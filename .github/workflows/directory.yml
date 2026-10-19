@@ -33,7 +33,7 @@ jobs:
           show-extensions: true
 
       - name: Create or update Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.app-token.outputs.token }}
           add-paths: DIRECTORY.md
