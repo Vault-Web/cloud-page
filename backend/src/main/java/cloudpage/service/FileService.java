@@ -3,12 +3,14 @@ package cloudpage.service;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -22,8 +24,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import cloudpage.exceptions.ResourceAlreadyExistsException;
-import java.nio.file.LinkOption;
 
 /**
  * Service for file-level operations within a user's storage area: uploading, deleting, renaming or
@@ -113,8 +113,8 @@ public class FileService {
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
    * quota is supplied, the upload is rejected if it would push the user's active storage usage
-   * beyond the limit. If a file with the same name already exists, the upload is rejected unless
-   * a matching {@code If-Match} ETag (or {@code *}) is supplied.
+   * beyond the limit. If a file with the same name already exists, the upload is rejected unless a
+   * matching {@code If-Match} ETag (or {@code *}) is supplied.
    *
    * @param rootPath the root directory of the user, used as a security boundary
    * @param relativeFolderPath the relative path of the destination folder
@@ -124,7 +124,7 @@ public class FileService {
    * @throws InvalidPathException if the file name is missing or the destination resolves outside
    *     the user's root directory or addresses the reserved trash directory
    * @throws ResourceAlreadyExistsException if a file with the same name exists and no {@code
-   * If-Match} value was supplied
+   *     If-Match} value was supplied
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
   public void uploadFile(
@@ -165,21 +165,21 @@ public class FileService {
     FileUtils.validatePath(rootPath, target);
 
     withEditLock(
-            target,
-            () -> {
-              boolean exists = Files.exists(target, LinkOption.NOFOLLOW_LINKS);
-              if (exists && (expectedETag == null || expectedETag.isBlank())) {
-                throw new ResourceAlreadyExistsException(
-                        "\"" + fileName + "\" already exists in this folder");
-              }
-              checkIfMatch(target, expectedETag);
-              if (Files.isRegularFile(target)) {
-                validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
-              } else {
-                FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
-              }
-              Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            });
+        target,
+        () -> {
+          boolean exists = Files.exists(target, LinkOption.NOFOLLOW_LINKS);
+          if (exists && (expectedETag == null || expectedETag.isBlank())) {
+            throw new ResourceAlreadyExistsException(
+                "\"" + fileName + "\" already exists in this folder");
+          }
+          checkIfMatch(target, expectedETag);
+          if (Files.isRegularFile(target)) {
+            validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
+          } else {
+            FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
+          }
+          Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+        });
   }
 
   public void moveFile(String rootPath, String relativeSourcePath, String relativeDestinationPath)
