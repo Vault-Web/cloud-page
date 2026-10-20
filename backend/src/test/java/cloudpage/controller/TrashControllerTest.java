@@ -1,10 +1,12 @@
 package cloudpage.controller;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +47,7 @@ class TrashControllerTest {
     testUser.setId("user-1");
     testUser.setUsername("testuser");
     testUser.setRootFolderPath("/root");
+    testUser.setStorageQuotaMb(100L);
     when(userService.getCurrentUser()).thenReturn(testUser);
   }
 
@@ -64,7 +67,20 @@ class TrashControllerTest {
   void restore_invokesServiceWithCurrentUser() throws Exception {
     mockMvc.perform(post("/api/files/trash/t1/restore")).andExpect(status().isOk());
 
-    verify(trashService).restore("/root", "user-1", "t1");
+    verify(trashService).restore("/root", "user-1", "t1", 100L);
+  }
+
+  @Test
+  void restore_exceedsQuota_returnsBadRequest() throws Exception {
+    String message = "Storage limit of 100 MB would be exceeded";
+    doThrow(new IllegalArgumentException(message))
+        .when(trashService)
+        .restore("/root", "user-1", "t1", 100L);
+
+    mockMvc
+        .perform(post("/api/files/trash/t1/restore"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(message));
   }
 
   @Test

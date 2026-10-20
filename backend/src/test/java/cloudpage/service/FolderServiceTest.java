@@ -3,23 +3,28 @@ package cloudpage.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import cloudpage.dto.FileDto;
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
 import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
+import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.FileUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -55,6 +60,36 @@ class FolderServiceTest {
 
     assertEquals(2, tree.getFiles().size());
     assertTrue(tree.getFolders().isEmpty());
+  }
+
+  @Test
+  void getFolderTree_conflictWithSymlinkOriginal_doesNotExposeOriginalPath() throws IOException {
+    Path outsideFile = Files.createTempFile("outside-", ".md");
+
+    try {
+      Files.writeString(outsideFile, "outside");
+
+      try {
+        Files.createSymbolicLink(tempDir.resolve("a.md"), outsideFile);
+      } catch (IOException | UnsupportedOperationException e) {
+        Assumptions.assumeTrue(false, "Symbolic links are not available");
+      }
+
+      Files.writeString(tempDir.resolve("a.sync-conflict-20261010-142530-DEV.md"), "conflict");
+
+      FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+      FileDto conflictFile =
+          tree.getFiles().stream()
+              .filter(file -> file.getName().contains(".sync-conflict-"))
+              .findFirst()
+              .orElseThrow();
+
+      assertTrue(conflictFile.isConflict());
+      assertNull(conflictFile.getOriginalPath());
+    } finally {
+      Files.deleteIfExists(outsideFile);
+    }
   }
 
   @Test
@@ -144,6 +179,15 @@ class FolderServiceTest {
         () -> folderService.createFolder(tempDir.toString(), "", "../../hack"));
   }
 
+  @Test
+  void createFolder_trashPath_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.createFolder(tempDir.toString(), "", ".trash"));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
   // ── deleteFolder ─────────────────────────────────────────────────────────
 
   @Test
@@ -174,53 +218,100 @@ class FolderServiceTest {
         () -> folderService.deleteFolder(tempDir.toString(), "../../etc"));
   }
 
+  @Test
+  void deleteFolder_rootUserFolderProvided_throwsFileDeletionException() throws IOException {
+    Path rootPath = Paths.get(tempDir.toString(), ".", "testDir");
+    Files.createFile(rootPath);
+    assertThrows(
+        FileDeletionException.class, () -> folderService.deleteFolder(rootPath.toString(), "."));
+  }
+
+  @Test
+  void deleteFolder_trashPath_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path trashedFile = Files.writeString(trash.resolve("trashed-file"), "data");
+
+    assertThrows(
+        InvalidPathException.class, () -> folderService.deleteFolder(tempDir.toString(), ".trash"));
+
+    assertTrue(Files.isDirectory(trash));
+    assertTrue(Files.exists(trashedFile));
+  }
+
   // ── renameOrMoveFolder ───────────────────────────────────────────────────
 
   @Test
-  void renameOrMoveFolder_rename_successfullyRenames() throws IOException {
+  void renameOrMoveFolderFolder_rename_successfullyRenames() throws IOException {
     Files.createDirectory(tempDir.resolve("oldName"));
 
-    folderService.renameOrMoveFolder(tempDir.toString(), "oldName", "newName");
+    folderService.moveFolder(tempDir.toString(), "oldName", "newName");
 
     assertFalse(Files.exists(tempDir.resolve("oldName")));
     assertTrue(Files.isDirectory(tempDir.resolve("newName")));
   }
 
   @Test
-  void renameOrMoveFolder_moveToSubfolder() throws IOException {
+  void renameOrMoveFolder_moveFolderToSubfolder() throws IOException {
     Files.createDirectory(tempDir.resolve("source"));
     Files.createDirectory(tempDir.resolve("target"));
 
-    folderService.renameOrMoveFolder(tempDir.toString(), "source", "target/source");
+    folderService.moveFolder(tempDir.toString(), "source", "target/source");
 
     assertFalse(Files.exists(tempDir.resolve("source")));
     assertTrue(Files.isDirectory(tempDir.resolve("target/source")));
   }
 
   @Test
-  void renameOrMoveFolder_pathTraversal_throwsInvalidPathException() throws IOException {
+  void move_Folder_pathTraversal_throwsInvalidPathException() throws IOException {
     Files.createDirectory(tempDir.resolve("safe"));
 
     assertThrows(
         InvalidPathException.class,
-        () -> folderService.renameOrMoveFolder(tempDir.toString(), "safe", "../../evil"));
-  }
-
-  // ── validatePath ─────────────────────────────────────────────────────────
-
-  @Test
-  void validatePath_validPath_doesNotThrow() {
-    Path valid = tempDir.resolve("somefile.txt");
-
-    assertDoesNotThrow(() -> folderService.validatePath(tempDir.toString(), valid));
+        () -> folderService.moveFolder(tempDir.toString(), "safe", "../../evil"));
   }
 
   @Test
-  void validatePath_outsideRoot_throwsInvalidPathException() {
-    Path outside = tempDir.resolve("../../etc/passwd").normalize();
+  void move_Folder_trashDestination_throwsInvalidPathException() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
 
     assertThrows(
-        InvalidPathException.class, () -> folderService.validatePath(tempDir.toString(), outside));
+        InvalidPathException.class,
+        () -> folderService.moveFolder(tempDir.toString(), "source", ".trash/source"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(trash.resolve("source")));
+  }
+
+  @Test
+  void move_Folder_trashSource_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path source = Files.createDirectory(trash.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.moveFolder(tempDir.toString(), ".trash/source", "restored"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(tempDir.resolve("restored")));
+  }
+
+  @Test
+  void move_Folder_trashSourceAtEndOfTarget_throwsInvalidPathException() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path sourceFile = Files.writeString(source.resolve("file.txt"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.moveFolder(tempDir.toString(), "source", "source/.trash"));
+
+    assertTrue(Files.isDirectory(source));
+    assertTrue(Files.exists(sourceFile));
+    assertFalse(Files.exists(tempDir.resolve("restored")));
   }
 
   // ── FileDto content verification ─────────────────────────────────────────
@@ -235,6 +326,49 @@ class FolderServiceTest {
     assertEquals("info.txt", tree.getFiles().get(0).getName());
     assertEquals(5, tree.getFiles().get(0).getSize());
     assertNotNull(tree.getFiles().get(0).getPath());
+  }
+
+  @Test
+  void getFolderTree_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile =
+        tree.getFiles().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_doesNotMarkSimilarNameAsSyncthingConflict() throws IOException {
+    Files.writeString(tempDir.resolve("my-sync-conflict-notes.md"), "normal");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto file = tree.getFiles().get(0);
+
+    assertFalse(file.isConflict());
+    assertNull(file.getOriginalPath());
+  }
+
+  @Test
+  void getFolderTree_conflictWithoutOriginal_hasNullOriginalPath() throws IOException {
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    FolderDto tree = folderService.getFolderTree(tempDir.toString());
+
+    FileDto conflictFile = tree.getFiles().get(0);
+
+    assertTrue(conflictFile.isConflict());
+    assertNull(conflictFile.getOriginalPath());
   }
 
   // ── getFolderContentPage ───────────────────────────────────────────────────
@@ -626,6 +760,79 @@ class FolderServiceTest {
   }
 
   @Test
+  void getFolderContentPage_detectsSyncthingConflictFile() throws IOException {
+    Files.writeString(tempDir.resolve("thesis.md"), "original");
+    Files.writeString(
+        tempDir.resolve("thesis.sync-conflict-20261010-142530-LAPTOP.md"), "conflict");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+    assertNotNull(result);
+
+    FolderContentItemDto conflictFile =
+        result.getContent().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("thesis.md", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderContentPage_detectsSyncthingConflictFileWithMultipleExtensions()
+      throws IOException {
+    Files.writeString(tempDir.resolve("backup.tar.gz"), "original");
+    Files.writeString(
+        tempDir.resolve("backup.sync-conflict-20261010-142530-LAPTOP.tar.gz"), "conflict");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+    assertNotNull(result);
+
+    FolderContentItemDto conflictFile =
+        result.getContent().stream()
+            .filter(file -> file.getName().contains(".sync-conflict-"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(conflictFile.isConflict());
+    assertEquals("backup.tar.gz", conflictFile.getOriginalPath());
+  }
+
+  @Test
+  void getFolderContentPage_conflictWithSymlinkOriginal_doesNotExposeOriginalPath()
+      throws IOException {
+    Path outsideFile = Files.createTempFile("outside-", ".md");
+
+    try {
+      Files.writeString(outsideFile, "outside");
+      try {
+        Files.createSymbolicLink(tempDir.resolve("a.md"), outsideFile);
+      } catch (IOException | UnsupportedOperationException e) {
+        Assumptions.assumeTrue(false, "Symbolic links are not available");
+      }
+      Files.writeString(tempDir.resolve("a.sync-conflict-20261010-142530-DEV.md"), "conflict");
+
+      PageResponseDto<FolderContentItemDto> result =
+          folderService.getFolderContentPage(tempDir.toString(), "", 0, 100, null);
+
+      FolderContentItemDto conflictFile =
+          result.getContent().stream()
+              .filter(file -> file.getName().contains(".sync-conflict-"))
+              .findFirst()
+              .orElseThrow();
+
+      assertTrue(conflictFile.isConflict());
+      assertNull(conflictFile.getOriginalPath());
+    } finally {
+      Files.deleteIfExists(outsideFile);
+    }
+  }
+
+  @Test
   void getFolderContentPage_folderMetadata_containsCorrectFields() throws IOException {
     Files.createDirectory(tempDir.resolve("testFolder"));
 
@@ -663,6 +870,67 @@ class FolderServiceTest {
   }
 
   // ── searchInFolder: metadata filters & sorting ───────────────────────────
+
+  @Test
+  void searchInFolder_returnsUserRelativePath() throws IOException {
+    Path documents = Files.createDirectory(tempDir.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
+
+    assertEquals("report.txt", result.getName());
+    assertEquals("Documents/report.txt", result.getPath());
+  }
+
+  @Test
+  void searchInFolder_symlinkOutsideRoot_doesNotFailSearch() throws IOException {
+    Path target = Files.createTempFile("outside-target", ".txt");
+    Path link = tempDir.resolve("report-link");
+
+    try {
+      Files.createSymbolicLink(link, target);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report-link")).findFirst().orElseThrow();
+
+    assertEquals("report-link", result.getPath());
+  }
+
+  @Test
+  void searchInFolder_symlinkedRootAncestor_returnsRelativePath() throws IOException {
+    Path realBase = Files.createDirectory(tempDir.resolve("real-base"));
+    Path userRoot = Files.createDirectory(realBase.resolve("user-root"));
+    Path documents = Files.createDirectory(userRoot.resolve("Documents"));
+    Files.writeString(documents.resolve("report.txt"), "w");
+
+    Path linkedBase = tempDir.resolve("linked-base");
+
+    try {
+      Files.createSymbolicLink(linkedBase, realBase);
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+
+    Path lexicalRoot = linkedBase.resolve("user-root");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(lexicalRoot.toString(), "", "report", 20, 0);
+
+    SearchResult result =
+        results.stream().filter(r -> r.getName().equals("report.txt")).findFirst().orElseThrow();
+
+    assertEquals("Documents/report.txt", result.getPath());
+  }
 
   @Test
   void searchInFolder_filterByTypeFile_excludesFolders() throws IOException {
@@ -855,13 +1123,13 @@ class FolderServiceTest {
   void writeFolderArchive_excludesTrashDirectory() throws IOException {
     Path folder = Files.createDirectory(tempDir.resolve("files"));
     Files.writeString(folder.resolve("visible.txt"), "visible");
-    Path trash = Files.createDirectory(folder.resolve(TrashService.TRASH_DIR));
+    Path trash = Files.createDirectory(folder.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trash.resolve("deleted.txt"), "deleted");
 
     Map<String, String> entries = archiveEntries(folder);
 
     assertEquals("visible", entries.get("visible.txt"));
-    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(TrashService.TRASH_DIR)));
+    assertTrue(entries.keySet().stream().noneMatch(name -> name.contains(FileUtils.TRASH_DIR)));
   }
 
   @Test

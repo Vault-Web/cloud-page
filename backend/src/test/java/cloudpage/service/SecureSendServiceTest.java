@@ -14,6 +14,7 @@ import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.SecureSendRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -223,7 +224,7 @@ class SecureSendServiceTest {
   @Test
   void fileLinkAcceptsNoChildPathAndTheTrashCannotBeShared() throws Exception {
     Files.writeString(tempDir.resolve("report.pdf"), "report");
-    Path trash = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trash = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trash.resolve("deleted.txt"), "deleted");
     CreatedSecureSend created = service.create(owner, "report.pdf", NOW.plusSeconds(3600), null);
     when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
@@ -238,7 +239,7 @@ class SecureSendServiceTest {
         SecureSendUnavailableException.class, () -> service.listFolder(created.token(), null, ""));
     assertThrows(
         RuntimeException.class,
-        () -> service.create(owner, TrashService.TRASH_DIR, NOW.plusSeconds(60), null));
+        () -> service.create(owner, FileUtils.TRASH_DIR, NOW.plusSeconds(60), null));
   }
 
   @Test

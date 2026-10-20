@@ -13,6 +13,7 @@ import cloudpage.model.SharedResourceType;
 import cloudpage.model.User;
 import cloudpage.repository.ResourceShareRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -43,6 +44,7 @@ public class ResourceShareService {
   private final UserRepository userRepository;
   private final FolderService folderService;
   private final FileService fileService;
+  private final TrashService trashService;
   private final Clock clock;
 
   @Autowired
@@ -50,8 +52,15 @@ public class ResourceShareService {
       ResourceShareRepository shareRepository,
       UserRepository userRepository,
       FolderService folderService,
-      FileService fileService) {
-    this(shareRepository, userRepository, folderService, fileService, Clock.systemUTC());
+      FileService fileService,
+      TrashService trashService) {
+    this(
+        shareRepository,
+        userRepository,
+        folderService,
+        fileService,
+        trashService,
+        Clock.systemUTC());
   }
 
   ResourceShareService(
@@ -59,11 +68,13 @@ public class ResourceShareService {
       UserRepository userRepository,
       FolderService folderService,
       FileService fileService,
+      TrashService trashService,
       Clock clock) {
     this.shareRepository = shareRepository;
     this.userRepository = userRepository;
     this.folderService = folderService;
     this.fileService = fileService;
+    this.trashService = trashService;
     this.clock = clock;
   }
 
@@ -88,7 +99,7 @@ public class ResourceShareService {
     Path requested = parseRelativePath(path, "resource path");
     rejectTrashPath(requested);
     Path target = rootReal.resolve(requested).normalize();
-    folderService.validatePath(rootReal.toString(), target);
+    FileUtils.validatePath(rootReal.toString(), target);
     if (!Files.exists(target)) {
       throw new ResourceNotFoundException("Resource", "Path", path);
     }
@@ -213,29 +224,48 @@ public class ResourceShareService {
 
   public void editFile(String shareId, User recipient, String childPath, MultipartFile file)
       throws IOException {
+    editFile(shareId, recipient, childPath, file, null);
+  }
+
+  public void editFile(
+      String shareId, User recipient, String childPath, MultipartFile file, String expectedETag)
+      throws IOException {
     if (file == null || file.isEmpty()) {
       throw new IllegalArgumentException("Replacement file must not be empty");
     }
+
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
+
     if (!Files.isRegularFile(resolved.target())) {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
-    long existingSize = Files.size(resolved.target());
-    fileService.validateReplacementWithinQuota(
-        resolved.ownerRoot().toString(), existingSize, file.getSize(), resolved.ownerQuotaMb());
-    try (var input = file.getInputStream();
-        FileChannel channel =
-            FileChannel.open(
-                resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-      Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
-      if (Files.isSymbolicLink(resolved.target())
-          || !currentTarget.startsWith(resolved.sharedRoot())
-          || !currentTarget.startsWith(resolved.ownerRoot())) {
-        throw new InvalidPathException("Shared edit target is no longer inside its share");
-      }
-      channel.truncate(0);
-      input.transferTo(Channels.newOutputStream(channel));
-    }
+
+    fileService.withEditLock(
+        resolved.target(),
+        () -> {
+          fileService.checkIfMatch(resolved.target(), expectedETag);
+          long existingSize = Files.size(resolved.target());
+          fileService.validateReplacementWithinQuota(
+              resolved.ownerRoot().toString(),
+              existingSize,
+              file.getSize(),
+              resolved.ownerQuotaMb());
+
+          try (var input = file.getInputStream();
+              FileChannel channel =
+                  FileChannel.open(
+                      resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+            Path currentTarget =
+                resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+            if (Files.isSymbolicLink(resolved.target())
+                || !currentTarget.startsWith(resolved.sharedRoot())
+                || !currentTarget.startsWith(resolved.ownerRoot())) {
+              throw new InvalidPathException("Shared edit target is no longer inside its share");
+            }
+            channel.truncate(0);
+            input.transferTo(Channels.newOutputStream(channel));
+          }
+        });
   }
 
   /**
@@ -274,6 +304,20 @@ public class ResourceShareService {
    * this way — that is the owner's resource, and the recipient's link to it is removed by revoking
    * the share, not by erasing the data.
    */
+  /**
+   * Deletes a file or folder inside a share. Requires EDIT.
+   *
+   * <p>Files are moved into the <b>owner's</b> trash, exactly as if the owner had deleted the file
+   * themselves — a recipient with EDIT access must not be able to destroy the owner's data with no
+   * recovery path. See the class-level note on folders below.
+   *
+   * <p><b>Folders are still hard-deleted here</b>, matching {@code FolderController}'s own delete
+   * endpoint for the owner's own folders: this codebase has no folder-level trash mechanism at all
+   * today ({@link TrashService#moveToTrash} only accepts a single regular file). Routing folder
+   * deletes through trash is real follow-up work — it needs a trash design that can hold a whole
+   * subtree, restore it, and account for its size against retention/quota — not a one-line change
+   * here, so it is intentionally out of scope for this fix rather than silently expanding it.
+   */
   public void deleteInShare(String shareId, User recipient, String childPath) throws IOException {
     ResolvedShare resolved = resolve(shareId, recipient, childPath, SharePermission.EDIT);
     requireInsideShare(resolved, "The shared resource itself cannot be deleted");
@@ -281,7 +325,7 @@ public class ResourceShareService {
     if (Files.isDirectory(resolved.target())) {
       folderService.deleteFolder(resolved.ownerRoot().toString(), relative);
     } else {
-      fileService.deleteFile(resolved.ownerRoot().toString(), relative);
+      trashService.moveToTrash(resolved.ownerRoot().toString(), resolved.ownerId(), relative);
     }
   }
 
@@ -299,9 +343,9 @@ public class ResourceShareService {
     String relTarget =
         resolved.ownerRoot().relativize(parent.resolve(newName).normalize()).toString();
     if (Files.isDirectory(resolved.target())) {
-      folderService.renameOrMoveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
+      folderService.moveFolder(resolved.ownerRoot().toString(), relSource, relTarget);
     } else {
-      fileService.renameOrMoveFile(resolved.ownerRoot().toString(), relSource, relTarget);
+      fileService.moveFile(resolved.ownerRoot().toString(), relSource, relTarget);
     }
   }
 
@@ -314,7 +358,7 @@ public class ResourceShareService {
     try (var children = Files.list(resolved.target())) {
       return children
           .filter(path -> !Files.isSymbolicLink(path))
-          .filter(path -> !TrashService.TRASH_DIR.equals(path.getFileName().toString()))
+          .filter(path -> !FileUtils.TRASH_DIR.equals(path.getFileName().toString()))
           .map(
               path -> {
                 try {
@@ -385,7 +429,8 @@ public class ResourceShareService {
     if (!targetReal.startsWith(sharedRoot) || !targetReal.startsWith(ownerRoot)) {
       throw new ResourceNotFoundException("Shared resource", "path", childPath);
     }
-    return new ResolvedShare(ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb());
+    return new ResolvedShare(
+        ownerRoot, sharedRoot, targetReal, owner.getStorageQuotaMb(), owner.getId());
   }
 
   private Path parseRelativePath(String value, String label) {
@@ -440,7 +485,7 @@ public class ResourceShareService {
 
   private void rejectTrashPath(Path path) {
     for (Path part : path) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
+      if (FileUtils.TRASH_DIR.equals(part.toString())) {
         throw new InvalidPathException("Trash resources cannot be shared or accessed");
       }
     }
@@ -465,5 +510,6 @@ public class ResourceShareService {
         share.getRevokedAt() != null);
   }
 
-  private record ResolvedShare(Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb) {}
+  private record ResolvedShare(
+      Path ownerRoot, Path sharedRoot, Path target, Long ownerQuotaMb, String ownerId) {}
 }

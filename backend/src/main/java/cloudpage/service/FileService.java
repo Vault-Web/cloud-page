@@ -3,7 +3,9 @@ package cloudpage.service;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -13,6 +15,9 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -25,10 +30,87 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class FileService {
+  private final ConcurrentHashMap<Path, EditLock> editLocks = new ConcurrentHashMap<>();
+
+  /** A per-file lock together with the number of threads currently holding or awaiting it. */
+  private static final class EditLock {
+    private final ReentrantLock lock = new ReentrantLock();
+    private int holders;
+  }
+
+  /** A file write that runs while the target's edit lock is held. */
+  @FunctionalInterface
+  interface EditAction {
+    void run() throws IOException;
+  }
+
+  /**
+   * Runs {@code action} while holding the edit lock for {@code target}, so that a precondition
+   * check and the following write happen atomically with respect to other edits of the same file.
+   * Direct uploads and shared edits resolve the same file to the same lock even when they reach it
+   * through different (e.g. symlinked) paths. Locks are removed once no thread needs them.
+   */
+  void withEditLock(Path target, EditAction action) throws IOException {
+    Path key = editLockKey(target);
+    EditLock entry =
+        editLocks.compute(
+            key,
+            (k, existing) -> {
+              EditLock lock = existing != null ? existing : new EditLock();
+              lock.holders++;
+              return lock;
+            });
+    entry.lock.lock();
+    try {
+      action.run();
+    } finally {
+      entry.lock.unlock();
+      editLocks.compute(key, (k, lock) -> --lock.holders == 0 ? null : lock);
+    }
+  }
+
+  int activeEditLockCount() {
+    return editLocks.size();
+  }
+
+  static Path editLockKey(Path target) throws IOException {
+    Path absolute = target.toAbsolutePath().normalize();
+    Path parent = absolute.getParent();
+    if (parent == null || !Files.exists(parent)) {
+      return absolute;
+    }
+    return parent.toRealPath().resolve(absolute.getFileName());
+  }
+
+  /**
+   * Checks an {@code If-Match} header against the current state of {@code target}. A missing or
+   * blank header always passes. Otherwise the target must exist and the header must be {@code *} or
+   * contain the target's current ETag; weak ETags never match, as If-Match uses strong comparison.
+   *
+   * @throws ResourceConflictException if the precondition fails
+   */
+  void checkIfMatch(Path target, String ifMatch) throws IOException {
+    if (ifMatch == null || ifMatch.isBlank()) {
+      return;
+    }
+    if (!Files.isRegularFile(target)) {
+      throw new ResourceConflictException("File has changed or no longer exists");
+    }
+    if (ifMatch.trim().equals("*")) {
+      return;
+    }
+    String currentETag = loadAsResource(target).getETag();
+    for (String candidate : ifMatch.split(",")) {
+      if (candidate.trim().equals(currentETag)) {
+        return;
+      }
+    }
+    throw new ResourceConflictException("File has changed since it was last read");
+  }
 
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
-   * quota is supplied, the upload is rejected if it would push the user's total storage usage
+   * quota is supplied, the upload is rejected if it would push the user's active storage usage
    * beyond the limit. An existing file with the same name is overwritten.
    *
    * @param rootPath the root directory of the user, used as a security boundary
@@ -37,32 +119,28 @@ public class FileService {
    * @param quotaMb the storage quota in megabytes, or {@code null} for no quota
    * @throws IOException if the folder cannot be created or the file cannot be written
    * @throws InvalidPathException if the file name is missing or the destination resolves outside
-   *     the user's root directory
+   *     the user's root directory or addresses the reserved trash directory
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
   public void uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
+    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
+  }
+
+  public void uploadFile(
+      String rootPath,
+      String relativeFolderPath,
+      MultipartFile file,
+      Long quotaMb,
+      String expectedETag)
+      throws IOException {
+    FileUtils.rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
 
     if (!Files.exists(folder)) {
       Files.createDirectories(folder);
-    }
-    // Only measure the whole storage when a quota is actually enforced. The walk
-    // is O(all files) and, on a large tree over a spinning disk, slow enough to
-    // time the request out — so it must not run when there is no quota to check.
-    if (quotaMb != null) {
-      long newFileSize = file.getSize();
-      long currentSize = calculateDirectorySize(Paths.get(rootPath));
-      long quotaBytes = quotaMb * 1024 * 1024;
-
-      if (currentSize + newFileSize > quotaBytes) {
-        throw new IllegalArgumentException(
-            "Upload rejected: storage limit of "
-                + quotaMb
-                + " MB reached. Please delete files to free space.");
-      }
     }
 
     String originalFilename = file.getOriginalFilename();
@@ -76,57 +154,34 @@ public class FileService {
     if (fileName == null) {
       throw new InvalidPathException("Invalid file name: " + originalFilename);
     }
+    FileUtils.rejectTrashPath(fileName);
 
     Path target = folder.resolve(fileName).normalize();
-    validatePath(rootPath, target);
-    Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+    FileUtils.validatePath(rootPath, target);
+
+    withEditLock(
+        target,
+        () -> {
+          checkIfMatch(target, expectedETag);
+          if (Files.isRegularFile(target)) {
+            validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
+          } else {
+            FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
+          }
+          Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+        });
   }
 
-  /**
-   * Deletes a file if it exists. Does nothing if the file is already absent.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to delete
-   * @throws IOException if the file cannot be deleted
-   * @throws InvalidPathException if the file is outside the user's root directory
-   */
-  public void deleteFile(String rootPath, String relativeFilePath) throws IOException {
-    Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
-    Files.deleteIfExists(file);
-  }
-
-  /**
-   * Renames or moves a file to a new location, overwriting any existing file at the destination.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to move
-   * @param relativeNewPath the relative destination path
-   * @throws IOException if the file cannot be moved
-   * @throws InvalidPathException if the source or destination is outside the user's root directory
-   */
-  public void renameOrMoveFile(String rootPath, String relativeFilePath, String relativeNewPath)
+  public void moveFile(String rootPath, String relativeSourcePath, String relativeDestinationPath)
       throws IOException {
-    Path source = Paths.get(rootPath, relativeFilePath).normalize();
-    Path target = Paths.get(rootPath, relativeNewPath).normalize();
-    validatePath(rootPath, source);
-    validatePath(rootPath, target.getParent());
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    FileUtils.rejectTrashPath(Paths.get(relativeSourcePath).normalize());
+    FileUtils.rejectTrashPath(Paths.get(relativeDestinationPath).normalize());
+    FileUtils.move(rootPath, relativeSourcePath, relativeDestinationPath);
   }
 
-  /**
-   * Reads the entire textual content of a file.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param relativeFilePath the relative path of the file to read
-   * @return the file content as a string
-   * @throws IOException if the file cannot be read
-   * @throws InvalidPathException if the file is outside the user's root directory
-   * @throws ResourceNotFoundException if the file does not exist or is not a regular file
-   */
   public String readFileContent(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtils.validatePath(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", file.toString());
@@ -151,7 +206,7 @@ public class FileService {
    */
   public String calculateChecksum(String rootPath, String relativeFilePath) throws IOException {
     Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    validatePath(rootPath, file);
+    FileUtils.validatePath(rootPath, file);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
@@ -190,53 +245,8 @@ public class FileService {
   }
 
   /**
-   * Validates that a path stays within the user's root directory, guarding against path traversal.
-   * Existing paths are resolved through symbolic links; for a non-existent path the existing parent
-   * directory is resolved instead so the intended location can still be checked.
-   *
-   * @param rootPath the root directory of the user, used as a security boundary
-   * @param path the path to validate
-   * @throws IOException if the real path cannot be resolved
-   * @throws InvalidPathException if the path resolves outside the user's root directory
-   */
-  private void validatePath(String rootPath, Path path) throws IOException {
-    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path pathReal;
-
-    // If path exists, resolve symlinks to get the real path
-    if (Files.exists(path)) {
-      pathReal = path.toRealPath().normalize();
-    } else {
-      // For non-existent paths, resolve the parent if it exists
-      Path parent = path.getParent();
-      if (parent != null && Files.exists(parent)) {
-        Path parentReal = parent.toRealPath().normalize();
-        // Check if the resolved parent is within root
-        if (!parentReal.startsWith(rootReal)) {
-          throw new InvalidPathException("Path traversal attempt detected: " + path);
-        }
-        // Construct the child path from the resolved parent
-        Path fileName = path.getFileName();
-        if (fileName != null) {
-          pathReal = parentReal.resolve(fileName).normalize();
-        } else {
-          pathReal = parentReal;
-        }
-      } else {
-        // Parent doesn't exist or is null, validate using absolute path
-        // This is a fallback for edge cases
-        pathReal = path.toAbsolutePath().normalize();
-      }
-    }
-
-    if (!pathReal.startsWith(rootReal)) {
-      throw new InvalidPathException("Path traversal attempt detected: " + path);
-    }
-  }
-
-  /**
    * Loads a file as a downloadable {@link Resource}, together with an ETag and last-modified
-   * timestamp derived from its size and modification time.
+   * timestamp derived from its size and modification time (at the filesystem's full precision).
    *
    * @param fullPath the path of the file to load
    * @return a {@link FileResource} wrapping the resource, its ETag, and last-modified time
@@ -252,7 +262,8 @@ public class FileService {
     Resource resource = new UrlResource(fullPath.toUri());
 
     BasicFileAttributes attrs = Files.readAttributes(fullPath, BasicFileAttributes.class);
-    String etag = "\"" + attrs.size() + "-" + attrs.lastModifiedTime().toMillis() + "\"";
+    String etag =
+        "\"" + attrs.size() + "-" + attrs.lastModifiedTime().to(TimeUnit.NANOSECONDS) + "\"";
 
     long lastModified = attrs.lastModifiedTime().toMillis();
 
@@ -266,7 +277,7 @@ public class FileService {
     if (quotaMb == null) {
       return;
     }
-    long currentSize = calculateDirectorySize(Paths.get(rootPath));
+    long currentSize = FileUtils.calculateDirectorySize(Paths.get(rootPath));
     long quotaBytes = Math.multiplyExact(quotaMb, 1024L * 1024L);
     long projectedSize = Math.subtractExact(currentSize, existingFileSize);
     projectedSize = Math.addExact(projectedSize, replacementSize);
@@ -274,30 +285,5 @@ public class FileService {
       throw new IllegalArgumentException(
           "Edit rejected: storage limit of " + quotaMb + " MB would be exceeded");
     }
-  }
-
-  /**
-   * Calculates the total size of a directory by recursively summing the sizes of all regular files
-   * it contains. Files whose size cannot be read are skipped.
-   *
-   * @param path the directory to measure
-   * @return the total size in bytes of all regular files under {@code path}, or {@code 0} if the
-   *     path does not exist
-   * @throws IOException if the directory tree cannot be traversed
-   */
-  private long calculateDirectorySize(Path path) throws IOException {
-    if (!Files.exists(path)) return 0;
-
-    return Files.walk(path)
-        .filter(Files::isRegularFile)
-        .mapToLong(
-            p -> {
-              try {
-                return Files.size(p);
-              } catch (IOException e) {
-                return 0;
-              }
-            })
-        .sum();
   }
 }

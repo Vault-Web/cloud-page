@@ -5,6 +5,7 @@ import cloudpage.exceptions.FileAccessException;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,12 +15,12 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -31,7 +32,27 @@ public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
 
+  private static final Pattern SYNCTHING_CONFLICT_PATTERN =
+      Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
+
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  private boolean isSyncthingConflict(String fileName) {
+    return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
+  }
+
+  private String inferOriginalFileName(String fileName) {
+    var matcher = SYNCTHING_CONFLICT_PATTERN.matcher(fileName);
+
+    if (!matcher.matches()) {
+      return null;
+    }
+
+    String baseName = matcher.group(1);
+    String extension = matcher.group(2);
+
+    return baseName + (extension != null ? extension : "");
+  }
 
   /**
    * Searches for files and folders within a given folder using the Jaro-Winkler similarity
@@ -62,8 +83,9 @@ public class FolderService {
       SearchFilter filter)
       throws IOException {
 
+    Path rootAbsolute = Paths.get(rootPath).toAbsolutePath().normalize();
     Path folder = Paths.get(rootPath, folderPath).normalize();
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
 
     if (!Files.exists(folder) || !Files.isDirectory(folder)) {
       throw new FileNotFoundException("Folder not found: " + folderPath);
@@ -73,12 +95,12 @@ public class FolderService {
     String lowerQuery = query.toLowerCase(Locale.ROOT);
     SearchFilter effectiveFilter = filter != null ? filter : new SearchFilter();
 
-    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
       return stream
           .filter(p -> !p.equals(folder))
           .filter(p -> !p.startsWith(trashDir))
-          .map(p -> createSearchResult(p, lowerQuery))
+          .map(p -> createSearchResult(p, lowerQuery, rootAbsolute))
           .filter(r -> r.getScore() >= minScore)
           .filter(r -> matchesFilter(r, effectiveFilter))
           .sorted(searchComparator(effectiveFilter))
@@ -153,7 +175,7 @@ public class FolderService {
    * @return a {@link SearchResult} with the calculated similarity score
    * @throws FileNotFoundException if the file or folder metadata cannot be read
    */
-  private SearchResult createSearchResult(Path path, String query) {
+  private SearchResult createSearchResult(Path path, String query, Path rootAbsolute) {
     String name = path.getFileName().toString();
     // Locale.ROOT prevents using the system's local language for case conversion
     String lowerName = name.toLowerCase(Locale.ROOT);
@@ -167,10 +189,12 @@ public class FolderService {
     }
 
     try {
+      Path lexicalPath = path.toAbsolutePath().normalize();
+      String relativePath = toRelativePath(rootAbsolute, lexicalPath);
       boolean isDir = Files.isDirectory(path);
       return new SearchResult(
           name,
-          path.toString(),
+          relativePath,
           isDir ? "folder" : "file",
           isDir ? null : Files.size(path),
           isDir ? null : Files.probeContentType(path),
@@ -198,22 +222,28 @@ public class FolderService {
   public FolderDto getFolderTree(String rootPath, String relativePath, boolean includeChildCounts)
       throws IOException {
     Path folder = Paths.get(rootPath, relativePath).normalize();
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
     return readFolderShallow(rootPath, folder, includeChildCounts);
   }
 
   public Path createFolder(String rootPath, String relativeParentPath, String name)
       throws IOException {
+    FileUtils.rejectTrashPath(Paths.get(relativeParentPath).resolve(name).normalize());
     Path parent = Paths.get(rootPath, relativeParentPath).normalize();
-    validatePath(rootPath, parent);
+    FileUtils.validatePath(rootPath, parent);
     Path newFolder = parent.resolve(name).normalize();
-    validatePath(rootPath, newFolder);
+    FileUtils.validatePath(rootPath, newFolder);
     return Files.createDirectory(newFolder);
   }
 
-  public void deleteFolder(String rootPath, String relativeFolderPath) throws IOException {
-    Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
-    validatePath(rootPath, folder);
+  public void deleteFolder(String rootPathString, String relativeFolderPath) throws IOException {
+    FileUtils.rejectTrashPath(Paths.get(relativeFolderPath).normalize());
+    Path rootPath = Paths.get(rootPathString).normalize();
+    Path folder = rootPath.resolve(relativeFolderPath).normalize();
+    FileUtils.validatePath(rootPathString, folder);
+    if (folder.equals(rootPath)) {
+      throw new FileDeletionException("Cannot delete root folder.");
+    }
 
     try (var stream = Files.walk(folder)) {
       stream
@@ -230,13 +260,11 @@ public class FolderService {
     }
   }
 
-  public void renameOrMoveFolder(String rootPath, String relativeFolderPath, String relativeNewPath)
+  public void moveFolder(String rootPath, String relativeSourcePath, String relativeDestinationPath)
       throws IOException {
-    Path source = Paths.get(rootPath, relativeFolderPath).normalize();
-    Path target = Paths.get(rootPath, relativeNewPath).normalize();
-    validatePath(rootPath, source);
-    validatePath(rootPath, target.getParent());
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    FileUtils.rejectTrashPath(Paths.get(relativeSourcePath).normalize());
+    FileUtils.rejectTrashPath(Paths.get(relativeDestinationPath).normalize());
+    FileUtils.move(rootPath, relativeSourcePath, relativeDestinationPath);
   }
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
@@ -264,7 +292,7 @@ public class FolderService {
             ? Paths.get(rootPath)
             : Paths.get(rootPath, relativePath).normalize();
 
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
     if (!Files.exists(folder) || !Files.isDirectory(folder)) {
       throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
     }
@@ -276,17 +304,32 @@ public class FolderService {
     List<FolderContentItemDto> items = new ArrayList<>();
 
     try (var stream = Files.list(folder)) {
-      Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+      Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
       items =
           stream
               .filter(path -> !path.normalize().equals(trashDir))
               .map(
                   path -> {
                     try {
-                      Path pathReal = resolvePathWithinRoot(rootReal, path);
+                      Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
+                      String fileName = path.getFileName().toString();
+                      boolean conflict = !isDirectory && isSyncthingConflict(fileName);
+
+                      String originalPath = null;
+
+                      if (conflict) {
+                        String originalFileName = inferOriginalFileName(fileName);
+                        Path originalFile = path.resolveSibling(originalFileName);
+
+                        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
+                          Path originalFileReal =
+                              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                          originalPath = toRelativePath(rootReal, originalFileReal);
+                        }
+                      }
                       long sizeValue = 0L;
                       long lastModifiedAt;
 
@@ -312,12 +355,14 @@ public class FolderService {
                       }
 
                       return new FolderContentItemDto(
-                          path.getFileName().toString(),
+                          fileName,
                           itemRelativePath,
                           isDirectory,
                           sizeValue,
                           null,
-                          lastModifiedAt);
+                          lastModifiedAt,
+                          conflict,
+                          originalPath);
                     } catch (IOException e) {
                       throw new InvalidPathException(
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
@@ -348,7 +393,7 @@ public class FolderService {
             ? Paths.get(rootPath)
             : Paths.get(rootPath, relativePath).normalize();
 
-    validatePath(rootPath, folder);
+    FileUtils.validatePath(rootPath, folder);
     if (!Files.exists(folder) || !Files.isDirectory(folder)) {
       throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
     }
@@ -452,11 +497,11 @@ public class FolderService {
       throws IOException {
     // Resolve root path once for relative path calculation and path validation
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path folderPathReal = resolvePathWithinRoot(rootReal, path);
+    Path folderPathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
 
     List<FolderListItemDto> subfolders = new ArrayList<>();
     List<FileDto> files = new ArrayList<>();
-    Path trashDir = Paths.get(rootPath, TrashService.TRASH_DIR).normalize();
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.list(path)) {
       stream
           .filter(childPath -> !childPath.normalize().equals(trashDir))
@@ -464,7 +509,8 @@ public class FolderService {
               childPath -> {
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal = resolvePathWithinRoot(rootReal, childPath);
+                  Path childPathReal =
+                      FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
 
                   if (Files.isDirectory(childPath)) {
                     subfolders.add(
@@ -520,14 +566,32 @@ public class FolderService {
   private FileDto toFileDto(Path rootReal, Path filePath, Path filePathReal) {
     try {
       String relativePath = toRelativePath(rootReal, filePathReal);
+      String fileName = filePath.getFileName().toString();
+      boolean conflict = isSyncthingConflict(fileName);
+
+      String originalPath = null;
+
+      if (conflict) {
+        String originalFileName = inferOriginalFileName(fileName);
+        Path originalFile = filePath.resolveSibling(originalFileName);
+
+        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
+          Path originalFileReal =
+              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+          originalPath = toRelativePath(rootReal, originalFileReal);
+        }
+      }
 
       BasicFileAttributes attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
       return new FileDto(
-          filePath.getFileName().toString(),
+          fileName,
           relativePath,
           attrs.size(),
           Files.probeContentType(filePath),
-          attrs.lastModifiedTime().toMillis());
+          attrs.lastModifiedTime().toMillis(),
+          conflict,
+          originalPath);
+
     } catch (IOException e) {
       throw new FileAccessException(
           "Failed to read file attributes: " + filePath + " with exception: " + e.getMessage());
@@ -540,7 +604,7 @@ public class FolderService {
           .filter(
               childPath -> {
                 try {
-                  validatePath(rootReal, childPath);
+                  FileUtils.validatePath(rootReal, childPath);
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while counting: "
@@ -558,11 +622,6 @@ public class FolderService {
               + " with exception: "
               + e.getMessage());
     }
-  }
-
-  public void validatePath(String rootPath, Path path) throws IOException {
-    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    resolvePathWithinRoot(rootReal, path);
   }
 
   /**
@@ -587,7 +646,7 @@ public class FolderService {
     }
     boolean addressesTrash = false;
     for (Path part : relative) {
-      if (TrashService.TRASH_DIR.equals(part.toString())) {
+      if (FileUtils.TRASH_DIR.equals(part.toString())) {
         addressesTrash = true;
         break;
       }
@@ -596,7 +655,9 @@ public class FolderService {
       throw new InvalidPathException("Invalid folder path: " + relativeFolderPath);
     }
 
-    Path folderReal = resolvePathWithinRoot(rootReal, rootReal.resolve(relative).normalize());
+    Path folderReal =
+        FileUtils.validateAndResolvePathWithinRoot(
+            rootReal, rootReal.resolve(relative).normalize());
     if (!Files.isDirectory(folderReal)) {
       throw new InvalidPathException("Folder does not exist or is not a directory: " + relative);
     }
@@ -612,7 +673,7 @@ public class FolderService {
   public void writeFolderArchive(String rootPath, Path folder, OutputStream output)
       throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
-    Path folderReal = resolvePathWithinRoot(rootReal, folder);
+    Path folderReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, folder);
     if (!Files.isDirectory(folderReal)) {
       throw new InvalidPathException("Folder does not exist or is not a directory: " + folder);
     }
@@ -625,7 +686,7 @@ public class FolderService {
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
                 throws IOException {
               if (!directory.equals(folderReal)
-                  && TrashService.TRASH_DIR.equals(directory.getFileName().toString())) {
+                  && FileUtils.TRASH_DIR.equals(directory.getFileName().toString())) {
                 return FileVisitResult.SKIP_SUBTREE;
               }
               if (!directory.equals(folderReal)) {
@@ -660,46 +721,6 @@ public class FolderService {
 
   private String archiveEntryName(Path folder, Path entry) {
     return folder.relativize(entry).toString().replace('\\', '/');
-  }
-
-  private void validatePath(Path rootReal, Path path) throws IOException {
-    resolvePathWithinRoot(rootReal, path);
-  }
-
-  private Path resolvePathWithinRoot(Path rootReal, Path path) throws IOException {
-    Path pathReal;
-
-    // If path exists, resolve symlinks to get the real path
-    if (Files.exists(path)) {
-      pathReal = path.toRealPath().normalize();
-    } else {
-      // For non-existent paths, resolve the parent if it exists
-      Path parent = path.getParent();
-      if (parent != null && Files.exists(parent)) {
-        Path parentReal = parent.toRealPath().normalize();
-        // Check if the resolved parent is within root
-        if (!parentReal.startsWith(rootReal)) {
-          throw new InvalidPathException("Path traversal attempt detected: " + path);
-        }
-        // Construct the child path from the resolved parent
-        Path fileName = path.getFileName();
-        if (fileName != null) {
-          pathReal = parentReal.resolve(fileName).normalize();
-        } else {
-          pathReal = parentReal;
-        }
-      } else {
-        // Parent doesn't exist or is null, validate using absolute path
-        // This is a fallback for edge cases
-        pathReal = path.toAbsolutePath().normalize();
-      }
-    }
-
-    if (!pathReal.startsWith(rootReal)) {
-      throw new InvalidPathException("Path traversal attempt detected: " + path);
-    }
-
-    return pathReal;
   }
 
   private String toRelativePath(Path rootReal, Path pathReal) {

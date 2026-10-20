@@ -29,4 +29,4 @@ jobs:
 
       - name: Build with Maven
         working-directory: ./backend
-        run: ./mvnw verify -DskipTests
+        run: ./mvnw verify

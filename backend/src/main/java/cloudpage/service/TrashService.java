@@ -6,6 +6,7 @@ import cloudpage.model.TrashEntry;
 import cloudpage.model.User;
 import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -36,12 +37,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TrashService {
 
-  /** Name of the per-user trash directory, relative to the user's root. */
-  public static final String TRASH_DIR = ".trash";
-
   private final TrashEntryRepository trashEntryRepository;
   private final UserRepository userRepository;
-  private final FolderService folderService;
 
   @Value("${cloudpage.trash.retention-days:30}")
   private int retentionDays;
@@ -58,12 +55,12 @@ public class TrashService {
   public void moveToTrash(String rootPath, String userId, String relativeFilePath)
       throws IOException {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
-    folderService.validatePath(rootPath, source);
+    FileUtils.validatePath(rootPath, source);
     if (!Files.isRegularFile(source)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
     }
 
-    Path trashDir = Paths.get(rootPath, TRASH_DIR);
+    Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR);
     Files.createDirectories(trashDir);
 
     String id = UUID.randomUUID().toString();
@@ -112,24 +109,28 @@ public class TrashService {
    * @param rootPath the root directory of the user, used as a security boundary
    * @param userId the id of the owning user
    * @param entryId the id of the trash entry to restore
+   * @param quotaMb the user's storage quota in megabytes, or {@code null} for no quota
    * @throws IOException if the file cannot be moved back
    * @throws ResourceNotFoundException if no matching trash entry exists for the user
+   * @throws IllegalArgumentException if restoring the file would exceed the storage quota
    */
-  public void restore(String rootPath, String userId, String entryId) throws IOException {
+  public void restore(String rootPath, String userId, String entryId, Long quotaMb)
+      throws IOException {
     TrashEntry entry =
         trashEntryRepository
             .findByIdAndUserId(entryId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("TrashEntry", "id", entryId));
 
-    Path trashed = Paths.get(rootPath, TRASH_DIR, entry.getId()).normalize();
-    folderService.validatePath(rootPath, trashed);
+    Path trashed = Paths.get(rootPath, FileUtils.TRASH_DIR, entry.getId()).normalize();
+    FileUtils.validatePath(rootPath, trashed);
 
     Path target = Paths.get(rootPath, entry.getOriginalPath()).normalize();
-    folderService.validatePath(rootPath, target.getParent());
+    FileUtils.validatePath(rootPath, target.getParent());
     if (Files.exists(target)) {
       throw new FileAlreadyExistsException(
           "Cannot restore: a file already exists at " + entry.getOriginalPath());
     }
+    FileUtils.validateStorageSizeWithinQuota(rootPath, entry.getSizeBytes(), quotaMb);
     Files.createDirectories(target.getParent());
     Files.move(trashed, target);
 
@@ -179,8 +180,8 @@ public class TrashService {
   }
 
   private void deleteTrashFile(String rootPath, TrashEntry entry) throws IOException {
-    Path file = Paths.get(rootPath, TRASH_DIR, entry.getId()).normalize();
-    folderService.validatePath(rootPath, file);
+    Path file = Paths.get(rootPath, FileUtils.TRASH_DIR, entry.getId()).normalize();
+    FileUtils.validatePath(rootPath, file);
     Files.deleteIfExists(file);
   }
 }

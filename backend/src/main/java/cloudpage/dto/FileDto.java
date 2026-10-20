@@ -13,4 +13,6 @@ public class FileDto {
   private long size;
   private String mimeType;
   private long lastModifiedAt;
+  private boolean conflict;
+  private String originalPath;
 }

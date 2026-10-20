@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import cloudpage.dto.FileResource;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -65,6 +66,128 @@ class FileServiceTest {
   }
 
   @Test
+  void uploadFile_currentETag_succeeds() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String currentETag = fileService.loadAsResource(target).getETag();
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "", file, null, currentETag);
+
+    assertEquals("new content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_staleETag_throwsResourceConflictException() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String staleETag = fileService.loadAsResource(target).getETag();
+
+    Files.writeString(target, "changed content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, staleETag));
+
+    assertEquals("changed content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_expectedETag_targetMissing_throwsResourceConflictException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "missing.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "\"missing-etag\""));
+  }
+
+  @Test
+  void uploadFile_wildcardIfMatch_replacesExistingFile() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "", file, null, "*");
+
+    assertEquals("new content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_wildcardIfMatch_targetMissing_throwsResourceConflictException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "missing.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "*"));
+    assertFalse(Files.exists(tempDir.resolve("missing.txt")));
+  }
+
+  @Test
+  void uploadFile_ifMatchListContainingCurrentETag_succeeds() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String currentETag = fileService.loadAsResource(target).getETag();
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "", file, null, "\"other\", " + currentETag);
+
+    assertEquals("new content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_weakIfMatch_throwsResourceConflictException() throws Exception {
+    Path target = Files.writeString(tempDir.resolve("file.txt"), "old content");
+    String currentETag = fileService.loadAsResource(target).getETag();
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
+
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "W/" + currentETag));
+    assertEquals("old content", Files.readString(target));
+  }
+
+  @Test
+  void uploadFile_replacingFile_countsOnlyTheSizeDifferenceAgainstQuota() throws Exception {
+    // A 1 MB quota that is already full: replacing the file with one of equal size must still work.
+    Path target = Files.write(tempDir.resolve("full.bin"), new byte[1024 * 1024]);
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "file", "full.bin", "application/octet-stream", new byte[1024 * 1024]);
+
+    assertDoesNotThrow(() -> fileService.uploadFile(tempDir.toString(), "", file, 1L));
+    assertEquals(1024 * 1024, Files.size(target));
+  }
+
+  @Test
+  void uploadFile_releasesEditLocksAfterwards() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "content".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "", file, null);
+    assertThrows(
+        ResourceConflictException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "\"stale\""));
+
+    assertEquals(0, fileService.activeEditLockCount());
+  }
+
+  @Test
+  void editLockKey_resolvesSymlinkedFoldersToTheSameKey() throws Exception {
+    Path realDir = Files.createDirectory(tempDir.resolve("real"));
+    Path linkDir = Files.createSymbolicLink(tempDir.resolve("link"), realDir);
+
+    assertEquals(
+        FileService.editLockKey(realDir.resolve("file.txt")),
+        FileService.editLockKey(linkDir.resolve("file.txt")));
+  }
+
+  @Test
   void uploadFile_pathTraversal_throwsInvalidPathException() {
     MockMultipartFile file =
         new MockMultipartFile("file", "evil.txt", "text/plain", "hack".getBytes());
@@ -110,27 +233,28 @@ class FileServiceTest {
         () -> fileService.uploadFile(tempDir.toString(), "docs", file, null));
   }
 
-  // ── deleteFile ───────────────────────────────────────────────────────────
-
   @Test
-  void deleteFile_existingFile_deletesSuccessfully() throws IOException {
-    Path file = Files.writeString(tempDir.resolve("toDelete.txt"), "bye");
+  void uploadFile_trashDestination_throwsInvalidPathException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "hidden.txt", "text/plain", "data".getBytes());
 
-    fileService.deleteFile(tempDir.toString(), "toDelete.txt");
-
-    assertFalse(Files.exists(file));
-  }
-
-  @Test
-  void deleteFile_nonExistentFile_doesNotThrow() {
-    assertDoesNotThrow(() -> fileService.deleteFile(tempDir.toString(), "ghost.txt"));
-  }
-
-  @Test
-  void deleteFile_pathTraversal_throwsInvalidPathException() {
     assertThrows(
         InvalidPathException.class,
-        () -> fileService.deleteFile(tempDir.toString(), "../../etc/passwd"));
+        () -> fileService.uploadFile(tempDir.toString(), ".trash", file, null));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
+  @Test
+  void uploadFile_trashFilename_throwsInvalidPathException() {
+    MockMultipartFile file =
+        new MockMultipartFile("file", ".trash", "text/plain", "data".getBytes());
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null));
+
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
   }
 
   // ── renameOrMoveFile ─────────────────────────────────────────────────────
@@ -139,7 +263,7 @@ class FileServiceTest {
   void renameOrMoveFile_renameInSameFolder() throws IOException {
     Files.writeString(tempDir.resolve("old.txt"), "data");
 
-    fileService.renameOrMoveFile(tempDir.toString(), "old.txt", "new.txt");
+    fileService.moveFile(tempDir.toString(), "old.txt", "new.txt");
 
     assertFalse(Files.exists(tempDir.resolve("old.txt")));
     assertTrue(Files.exists(tempDir.resolve("new.txt")));
@@ -147,23 +271,48 @@ class FileServiceTest {
   }
 
   @Test
-  void renameOrMoveFile_moveToDifferentFolder() throws IOException {
+  void moveToDifferentFolder() throws IOException {
     Files.writeString(tempDir.resolve("moveme.txt"), "data");
     Files.createDirectory(tempDir.resolve("subfolder"));
 
-    fileService.renameOrMoveFile(tempDir.toString(), "moveme.txt", "subfolder/moveme.txt");
+    fileService.moveFile(tempDir.toString(), "moveme.txt", "subfolder/moveme.txt");
 
     assertFalse(Files.exists(tempDir.resolve("moveme.txt")));
     assertTrue(Files.exists(tempDir.resolve("subfolder/moveme.txt")));
   }
 
   @Test
-  void renameOrMoveFile_pathTraversal_throwsInvalidPathException() throws IOException {
+  void moveFile_pathTraversal_throwsInvalidPathException() throws IOException {
     Files.writeString(tempDir.resolve("safe.txt"), "data");
 
     assertThrows(
         InvalidPathException.class,
-        () -> fileService.renameOrMoveFile(tempDir.toString(), "safe.txt", "../../evil.txt"));
+        () -> fileService.moveFile(tempDir.toString(), "safe.txt", "../../evil.txt"));
+  }
+
+  @Test
+  void moveFile_trashDestination_throwsInvalidPathException() throws IOException {
+    Path source = Files.writeString(tempDir.resolve("safe.txt"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.moveFile(tempDir.toString(), "safe.txt", ".trash/safe.txt"));
+
+    assertTrue(Files.exists(source));
+    assertFalse(Files.exists(tempDir.resolve(".trash/safe.txt")));
+  }
+
+  @Test
+  void moveFile_trashSource_throwsInvalidPathException() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(".trash"));
+    Path source = Files.writeString(trash.resolve("trashed-file"), "data");
+
+    assertThrows(
+        InvalidPathException.class,
+        () -> fileService.moveFile(tempDir.toString(), ".trash/trashed-file", "restored.txt"));
+
+    assertTrue(Files.exists(source));
+    assertFalse(Files.exists(tempDir.resolve("restored.txt")));
   }
 
   // ── readFileContent ──────────────────────────────────────────────────────
@@ -235,7 +384,7 @@ class FileServiceTest {
 
     FileResource result = fileService.loadAsResource(tempFile);
 
-    // ETag format is "size-lastModifiedMillis"
+    // ETag format is "size-lastModifiedNanos"
     assertTrue(result.getETag().startsWith("\"5-"));
   }
 

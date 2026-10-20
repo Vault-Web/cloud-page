@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.service.FolderService;
-import cloudpage.service.TrashService;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -89,7 +89,7 @@ class VirusScanServiceTest {
   @Test
   void startScan_excludesTrashDirectory() throws IOException {
     Files.writeString(tempDir.resolve("virus.txt"), "evil");
-    Path trash = Files.createDirectory(tempDir.resolve(TrashService.TRASH_DIR));
+    Path trash = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
     Files.writeString(trash.resolve("virus-in-trash.txt"), "evil");
 
     ScanJob job = service.startScan(tempDir.toString(), "user-1", "");
