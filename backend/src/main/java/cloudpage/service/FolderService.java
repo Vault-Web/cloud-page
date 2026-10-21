@@ -5,6 +5,7 @@ import cloudpage.exceptions.FileAccessException;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,8 +19,12 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -32,6 +37,8 @@ public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
 
+  private static final String CHECKSUM_ALGORITHM = "SHA-256";
+
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
       Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
 
@@ -39,6 +46,41 @@ public class FolderService {
 
   private boolean isSyncthingConflict(String fileName) {
     return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
+  }
+
+  private Set<Path> findDuplicatePaths(Path rootReal) throws IOException {
+    Map<String, List<Path>> filesByChecksum = new HashMap<>();
+    Path trashDir = rootReal.resolve(FileUtils.TRASH_DIR);
+
+    try (var stream = Files.walk(rootReal)) {
+      for (Path path : stream.toList()) {
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+          continue;
+        }
+
+        if (path.startsWith(trashDir)) {
+          continue;
+        }
+
+        String checksum;
+
+        try (InputStream inputStream = Files.newInputStream(path)) {
+          checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
+        }
+
+        filesByChecksum.computeIfAbsent(checksum, key -> new ArrayList<>()).add(path.toRealPath());
+      }
+    }
+
+    Set<Path> duplicatePaths = new HashSet<>();
+
+    for (List<Path> paths : filesByChecksum.values()) {
+      if (paths.size() > 1) {
+        duplicatePaths.addAll(paths);
+      }
+    }
+
+    return duplicatePaths;
   }
 
   private String inferOriginalFileName(String fileName) {
@@ -300,6 +342,8 @@ public class FolderService {
     // Resolve root path once for relative path calculation and path validation
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
 
+    Set<Path> duplicatePaths = findDuplicatePaths(rootReal);
+
     boolean eagerSizes = sortsBySize(sort);
     List<FolderContentItemDto> items = new ArrayList<>();
 
@@ -315,6 +359,8 @@ public class FolderService {
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
+                      boolean duplicate = !isDirectory && duplicatePaths.contains(pathReal);
+
                       String fileName = path.getFileName().toString();
                       boolean conflict = !isDirectory && isSyncthingConflict(fileName);
 
@@ -362,7 +408,8 @@ public class FolderService {
                           null,
                           lastModifiedAt,
                           conflict,
-                          originalPath);
+                          originalPath,
+                          duplicate);
                     } catch (IOException e) {
                       throw new InvalidPathException(
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());

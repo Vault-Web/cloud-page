@@ -2,6 +2,7 @@ package cloudpage.controller;
 
 import cloudpage.dto.ChecksumDto;
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.service.FileService;
 import cloudpage.service.FolderService;
@@ -37,14 +38,15 @@ public class FileController {
   private final TrashService trashService;
 
   @PostMapping("/upload")
-  public void uploadFile(
+  public UploadResultDto uploadFile(
       @RequestParam String folderPath,
       @RequestParam MultipartFile file,
       @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch)
       throws IOException {
 
     var user = userService.getCurrentUser();
-    fileService.uploadFile(
+
+    return fileService.uploadFile(
         user.getRootFolderPath(), folderPath, file, user.getStorageQuotaMb(), ifMatch);
   }
 

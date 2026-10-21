@@ -1,20 +1,19 @@
 package cloudpage.service;
 
+import cloudpage.dto.DuplicateFileDto;
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -122,13 +121,13 @@ public class FileService {
    *     the user's root directory or addresses the reserved trash directory
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
-  public void uploadFile(
+  public UploadResultDto uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
-    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
+    return uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
   }
 
-  public void uploadFile(
+  public UploadResultDto uploadFile(
       String rootPath,
       String relativeFolderPath,
       MultipartFile file,
@@ -159,6 +158,14 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
+    String checksum;
+
+    try (InputStream inputStream = file.getInputStream()) {
+      checksum = calculateChecksum(inputStream);
+    }
+
+    List<DuplicateFileDto> duplicates = findDuplicates(rootPath, checksum, target);
+
     withEditLock(
         target,
         () -> {
@@ -170,6 +177,7 @@ public class FileService {
           }
           Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         });
+    return new UploadResultDto(!duplicates.isEmpty(), duplicates);
   }
 
   public void moveFile(String rootPath, String relativeSourcePath, String relativeDestinationPath)
@@ -219,29 +227,41 @@ public class FileService {
       throw new InvalidPathException("Path traversal attempt detected: " + relativeFilePath);
     }
 
-    try {
-      MessageDigest digest = MessageDigest.getInstance(CHECKSUM_ALGORITHM);
-      byte[] buffer = new byte[8192];
-      try (InputStream in = Files.newInputStream(realFile)) {
-        int read;
-        while ((read = in.read(buffer)) != -1) {
-          digest.update(buffer, 0, read);
-        }
-      }
-      return toHex(digest.digest());
-    } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is mandated by the Java platform, so this should never happen.
-      throw new IllegalStateException("SHA-256 algorithm not available", e);
+    try (InputStream in = Files.newInputStream(realFile)) {
+      return calculateChecksum(in);
     }
   }
 
-  private static String toHex(byte[] bytes) {
-    StringBuilder sb = new StringBuilder(bytes.length * 2);
-    for (byte b : bytes) {
-      sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-      sb.append(Character.forDigit(b & 0xF, 16));
+  private String calculateChecksum(InputStream inputStream) throws IOException {
+    return ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
+  }
+
+  private List<DuplicateFileDto> findDuplicates(String rootPath, String checksum, Path target)
+      throws IOException {
+    Path root = Paths.get(rootPath).toRealPath();
+
+    try (var stream = Files.walk(root)) {
+      return stream
+          .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+          .filter(path -> !path.startsWith(root.resolve(FileUtils.TRASH_DIR)))
+          .filter(path -> !path.normalize().equals(target.normalize()))
+          .filter(
+              path -> {
+                try {
+                  String relativePath = root.relativize(path).toString();
+                  return calculateChecksum(rootPath, relativePath).equals(checksum);
+                } catch (IOException e) {
+                  return false;
+                }
+              })
+          .map(
+              path -> {
+                String relativePath = root.relativize(path).toString().replace('\\', '/');
+
+                return new DuplicateFileDto(path.getFileName().toString(), relativePath);
+              })
+          .toList();
     }
-    return sb.toString();
   }
 
   /**

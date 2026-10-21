@@ -760,6 +760,57 @@ class FolderServiceTest {
   }
 
   @Test
+  void getFolderContentPage_marksDuplicateFiles() throws IOException {
+    Files.writeString(tempDir.resolve("original.txt"), "same content");
+    Files.writeString(tempDir.resolve("copy.txt"), "same content");
+    Files.writeString(tempDir.resolve("unique.txt"), "different content");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    FolderContentItemDto original =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("original.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    FolderContentItemDto copy =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("copy.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    FolderContentItemDto unique =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("unique.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(original.isDuplicate());
+    assertTrue(copy.isDuplicate());
+    assertFalse(unique.isDuplicate());
+  }
+
+  @Test
+  void getFolderContentPage_marksDuplicateWhenCopyIsInAnotherFolder() throws IOException {
+    Files.writeString(tempDir.resolve("original.txt"), "same content");
+
+    Path archive = Files.createDirectory(tempDir.resolve("archive"));
+    Files.writeString(archive.resolve("copy.txt"), "same content");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+
+    FolderContentItemDto original =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("original.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(original.isDuplicate());
+  }
+
+  @Test
   void getFolderContentPage_detectsSyncthingConflictFile() throws IOException {
     Files.writeString(tempDir.resolve("thesis.md"), "original");
     Files.writeString(
