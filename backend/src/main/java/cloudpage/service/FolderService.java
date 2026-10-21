@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -37,6 +38,76 @@ public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
 
+  private final Map<Path, CachedChecksum> checksumCache = new ConcurrentHashMap<>();
+  private final Map<Path, DuplicateIndex> duplicateIndexCache = new ConcurrentHashMap<>();
+
+  private static final long DUPLICATE_INDEX_TTL_MS = 30_000L;
+
+  private record CachedChecksum(long size, long lastModified, String checksum) {}
+
+  private record DuplicateIndex(long createdAt, Map<Long, List<Path>> filesBySize) {}
+
+  private String getCachedChecksum(Path path) throws IOException {
+    BasicFileAttributes attrs =
+        Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+
+    long size = attrs.size();
+    long lastModified = attrs.lastModifiedTime().toMillis();
+
+    CachedChecksum cached = checksumCache.get(path);
+
+    if (cached != null && cached.size() == size && cached.lastModified() == lastModified) {
+      return cached.checksum();
+    }
+
+    String checksum;
+
+    try (InputStream inputStream = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
+      checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
+    }
+
+    checksumCache.put(path, new CachedChecksum(size, lastModified, checksum));
+
+    return checksum;
+  }
+
+  private DuplicateIndex getDuplicateIndex(Path rootReal) throws IOException {
+    long now = System.currentTimeMillis();
+
+    DuplicateIndex cached = duplicateIndexCache.get(rootReal);
+
+    if (cached != null && now - cached.createdAt() < DUPLICATE_INDEX_TTL_MS) {
+      return cached;
+    }
+
+    Map<Long, List<Path>> filesBySize = new HashMap<>();
+    Path trashDir = rootReal.resolve(FileUtils.TRASH_DIR);
+
+    Files.walkFileTree(
+        rootReal,
+        new SimpleFileVisitor<>() {
+          @Override
+          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+            if (attrs.isRegularFile() && attrs.size() > 0 && !file.startsWith(trashDir)) {
+
+              filesBySize.computeIfAbsent(attrs.size(), key -> new ArrayList<>()).add(file);
+            }
+
+            return FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFileFailed(Path file, IOException exc) {
+            return FileVisitResult.CONTINUE;
+          }
+        });
+
+    DuplicateIndex index = new DuplicateIndex(now, filesBySize);
+    duplicateIndexCache.put(rootReal, index);
+
+    return index;
+  }
+
   private static final String CHECKSUM_ALGORITHM = "SHA-256";
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
@@ -48,67 +119,48 @@ public class FolderService {
     return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
   }
 
-  private Set<Path> findDuplicatePaths(Path rootReal) throws IOException {
-    // Group by size first so we only hash files that could actually be duplicates.
-    Map<Long, List<Path>> filesBySize = new HashMap<>();
-    Path trashDir = rootReal.resolve(FileUtils.TRASH_DIR);
+  private void markDuplicatesForPage(Path rootReal, List<FolderContentItemDto> pageContent)
+      throws IOException {
 
-    Files.walkFileTree(
-        rootReal,
-        new SimpleFileVisitor<>() {
-          @Override
-          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            if (!attrs.isRegularFile() || file.startsWith(trashDir)) {
-              return FileVisitResult.CONTINUE;
-            }
+    Set<Long> relevantSizes = new HashSet<>();
 
-            long size = attrs.size();
+    for (FolderContentItemDto item : pageContent) {
+      if (!item.isDirectory() && item.getSize() > 0) {
+        relevantSizes.add(item.getSize());
+      }
+    }
 
-            if (size == 0) {
-              return FileVisitResult.CONTINUE;
-            }
+    if (relevantSizes.isEmpty()) {
+      return;
+    }
 
-            filesBySize.computeIfAbsent(size, key -> new ArrayList<>()).add(file);
+    DuplicateIndex duplicateIndex = getDuplicateIndex(rootReal);
+    Map<Long, List<Path>> candidatesBySize = duplicateIndex.filesBySize();
 
-            return FileVisitResult.CONTINUE;
-          }
-
-          @Override
-          public FileVisitResult visitFileFailed(Path file, IOException exc) {
-            // Skip unreadable files or directories instead of failing the whole folder listing.
-            return FileVisitResult.CONTINUE;
-          }
-        });
-
-    Map<String, List<Path>> filesByChecksum = new HashMap<>();
-
-    for (List<Path> sameSizeFiles : filesBySize.values()) {
-      if (sameSizeFiles.size() < 2) {
+    for (FolderContentItemDto item : pageContent) {
+      if (item.isDirectory() || item.getSize() == 0) {
         continue;
       }
 
-      for (Path path : sameSizeFiles) {
-        try (InputStream inputStream = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
-          String checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
+      Path currentPath = rootReal.resolve(item.getPath()).normalize();
 
-          filesByChecksum
-              .computeIfAbsent(checksum, key -> new ArrayList<>())
-              .add(path.toRealPath());
-        } catch (IOException e) {
-          // Skip unreadable files instead of failing the whole folder listing.
+      try {
+        String currentChecksum = getCachedChecksum(currentPath);
+
+        for (Path candidate : candidatesBySize.getOrDefault(item.getSize(), List.of())) {
+          if (candidate.normalize().equals(currentPath)) {
+            continue;
+          }
+
+          if (getCachedChecksum(candidate).equals(currentChecksum)) {
+            item.setDuplicate(true);
+            break;
+          }
         }
+      } catch (IOException e) {
+        // Leave duplicate=false when the file cannot be read.
       }
     }
-
-    Set<Path> duplicatePaths = new HashSet<>();
-
-    for (List<Path> paths : filesByChecksum.values()) {
-      if (paths.size() > 1) {
-        duplicatePaths.addAll(paths);
-      }
-    }
-
-    return duplicatePaths;
   }
 
   private String inferOriginalFileName(String fileName) {
@@ -370,8 +422,6 @@ public class FolderService {
     // Resolve root path once for relative path calculation and path validation
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
 
-    Set<Path> duplicatePaths = findDuplicatePaths(rootReal);
-
     boolean eagerSizes = sortsBySize(sort);
     List<FolderContentItemDto> items = new ArrayList<>();
 
@@ -387,8 +437,7 @@ public class FolderService {
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
-                      boolean duplicate = !isDirectory && duplicatePaths.contains(pathReal);
-
+                      boolean duplicate = false;
                       String fileName = path.getFileName().toString();
                       boolean conflict = !isDirectory && isSyncthingConflict(fileName);
 
@@ -456,6 +505,8 @@ public class FolderService {
 
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
+
+    markDuplicatesForPage(rootReal, pageContent);
 
     resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
 

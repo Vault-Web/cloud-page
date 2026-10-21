@@ -158,14 +158,6 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
-    checkIfMatch(target, expectedETag);
-
-    if (Files.isRegularFile(target)) {
-      validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
-    } else {
-      FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
-    }
-
     String checksum;
 
     try (InputStream inputStream = file.getInputStream()) {
