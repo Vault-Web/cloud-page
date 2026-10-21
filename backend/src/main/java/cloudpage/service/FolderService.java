@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -433,6 +434,9 @@ public class FolderService {
               .map(
                   path -> {
                     try {
+                      if (Files.isSymbolicLink(path)) {
+                        return null;
+                      }
                       Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
@@ -492,6 +496,7 @@ public class FolderService {
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
                     }
                   })
+              .filter(Objects::nonNull)
               .collect(Collectors.toList());
     }
 
@@ -633,6 +638,9 @@ public class FolderService {
           .filter(childPath -> !childPath.normalize().equals(trashDir))
           .forEach(
               childPath -> {
+                if (Files.isSymbolicLink(childPath)) {
+                  return;
+                }
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
                   Path childPathReal =
