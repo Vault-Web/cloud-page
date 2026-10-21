@@ -158,14 +158,21 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
+    checkIfMatch(target, expectedETag);
+
+    if (Files.isRegularFile(target)) {
+      validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
+    } else {
+      FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
+    }
+
     String checksum;
 
     try (InputStream inputStream = file.getInputStream()) {
       checksum = calculateChecksum(inputStream);
     }
 
-    List<DuplicateFileDto> duplicates = findDuplicates(rootPath, checksum, target);
-
+    List<DuplicateFileDto> duplicates = findDuplicates(rootPath, checksum, target, file.getSize());
     withEditLock(
         target,
         () -> {
@@ -236,15 +243,27 @@ public class FileService {
     return ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
   }
 
-  private List<DuplicateFileDto> findDuplicates(String rootPath, String checksum, Path target)
-      throws IOException {
+  private List<DuplicateFileDto> findDuplicates(
+      String rootPath, String checksum, Path target, long fileSize) throws IOException {
     Path root = Paths.get(rootPath).toRealPath();
+
+    if (fileSize == 0) {
+      return List.of();
+    }
 
     try (var stream = Files.walk(root)) {
       return stream
           .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
           .filter(path -> !path.startsWith(root.resolve(FileUtils.TRASH_DIR)))
           .filter(path -> !path.normalize().equals(target.normalize()))
+          .filter(
+              path -> {
+                try {
+                  return Files.size(path) == fileSize;
+                } catch (IOException e) {
+                  return false;
+                }
+              })
           .filter(
               path -> {
                 try {

@@ -49,26 +49,54 @@ public class FolderService {
   }
 
   private Set<Path> findDuplicatePaths(Path rootReal) throws IOException {
-    Map<String, List<Path>> filesByChecksum = new HashMap<>();
+    // Group by size first so we only hash files that could actually be duplicates.
+    Map<Long, List<Path>> filesBySize = new HashMap<>();
     Path trashDir = rootReal.resolve(FileUtils.TRASH_DIR);
 
-    try (var stream = Files.walk(rootReal)) {
-      for (Path path : stream.toList()) {
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-          continue;
+    Files.walkFileTree(
+        rootReal,
+        new SimpleFileVisitor<>() {
+          @Override
+          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+            if (!attrs.isRegularFile() || file.startsWith(trashDir)) {
+              return FileVisitResult.CONTINUE;
+            }
+
+            long size = attrs.size();
+
+            if (size == 0) {
+              return FileVisitResult.CONTINUE;
+            }
+
+            filesBySize.computeIfAbsent(size, key -> new ArrayList<>()).add(file);
+
+            return FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFileFailed(Path file, IOException exc) {
+            // Skip unreadable files or directories instead of failing the whole folder listing.
+            return FileVisitResult.CONTINUE;
+          }
+        });
+
+    Map<String, List<Path>> filesByChecksum = new HashMap<>();
+
+    for (List<Path> sameSizeFiles : filesBySize.values()) {
+      if (sameSizeFiles.size() < 2) {
+        continue;
+      }
+
+      for (Path path : sameSizeFiles) {
+        try (InputStream inputStream = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
+          String checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
+
+          filesByChecksum
+              .computeIfAbsent(checksum, key -> new ArrayList<>())
+              .add(path.toRealPath());
+        } catch (IOException e) {
+          // Skip unreadable files instead of failing the whole folder listing.
         }
-
-        if (path.startsWith(trashDir)) {
-          continue;
-        }
-
-        String checksum;
-
-        try (InputStream inputStream = Files.newInputStream(path)) {
-          checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
-        }
-
-        filesByChecksum.computeIfAbsent(checksum, key -> new ArrayList<>()).add(path.toRealPath());
       }
     }
 

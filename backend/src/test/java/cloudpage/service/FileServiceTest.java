@@ -3,6 +3,7 @@ package cloudpage.service;
 import static org.junit.jupiter.api.Assertions.*;
 
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceConflictException;
@@ -73,6 +74,21 @@ class FileServiceTest {
     assertTrue(result.getDuplicates().isEmpty());
 
     assertTrue(Files.exists(tempDir.resolve("docs/unique.txt")));
+  }
+
+  @Test
+  void uploadFile_emptyFile_isNotReportedAsDuplicate() throws IOException {
+    Path docs = tempDir.resolve("docs");
+    Files.createDirectories(docs);
+    Files.write(docs.resolve("existing.txt"), new byte[0]);
+
+    MockMultipartFile upload = new MockMultipartFile("file", "copy.txt", "text/plain", new byte[0]);
+
+    UploadResultDto result = fileService.uploadFile(tempDir.toString(), "docs", upload, null);
+
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+    assertTrue(Files.exists(docs.resolve("copy.txt")));
   }
 
   @Test
