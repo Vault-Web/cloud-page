@@ -158,24 +158,29 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
-    String checksum;
-
-    try (InputStream inputStream = file.getInputStream()) {
-      checksum = calculateChecksum(inputStream);
-    }
-
-    List<DuplicateFileDto> duplicates = findDuplicates(rootPath, checksum, target, file.getSize());
     withEditLock(
         target,
         () -> {
           checkIfMatch(target, expectedETag);
+
           if (Files.isRegularFile(target)) {
             validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
           } else {
             FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
           }
+
           Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         });
+
+    String checksum;
+
+    try (InputStream inputStream = Files.newInputStream(target)) {
+      checksum = calculateChecksum(inputStream);
+    }
+
+    List<DuplicateFileDto> duplicates =
+        findDuplicates(rootPath, checksum, target, Files.size(target));
+
     return new UploadResultDto(!duplicates.isEmpty(), duplicates);
   }
 

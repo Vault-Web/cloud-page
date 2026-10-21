@@ -145,21 +145,27 @@ public class FolderService {
 
       Path currentPath = rootReal.resolve(item.getPath()).normalize();
 
+      String currentChecksum;
+
       try {
-        String currentChecksum = getCachedChecksum(currentPath);
+        currentChecksum = getCachedChecksum(currentPath);
+      } catch (IOException e) {
+        continue;
+      }
 
-        for (Path candidate : candidatesBySize.getOrDefault(item.getSize(), List.of())) {
-          if (candidate.normalize().equals(currentPath)) {
-            continue;
-          }
+      for (Path candidate : candidatesBySize.getOrDefault(item.getSize(), List.of())) {
+        if (candidate.normalize().equals(currentPath)) {
+          continue;
+        }
 
+        try {
           if (getCachedChecksum(candidate).equals(currentChecksum)) {
             item.setDuplicate(true);
             break;
           }
+        } catch (IOException e) {
+          continue;
         }
-      } catch (IOException e) {
-        // Leave duplicate=false when the file cannot be read.
       }
     }
   }
