@@ -41,7 +41,8 @@ public class FolderController {
       @RequestParam int page,
       @RequestParam int size,
       @RequestParam(required = false) String sort,
-      @RequestParam(required = false, defaultValue = "true") boolean includeDirectorySizes)
+      @RequestParam(required = false, defaultValue = "true") boolean includeDirectorySizes,
+      @RequestParam(required = false, defaultValue = "false") boolean includeDuplicates)
       throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
@@ -51,6 +52,10 @@ public class FolderController {
     }
 
     var user = userService.getCurrentUser();
+    if (includeDuplicates) {
+      return folderService.getFolderContentPage(
+          user.getRootFolderPath(), path, page, size, sort, includeDirectorySizes, true);
+    }
     return folderService.getFolderContentPage(
         user.getRootFolderPath(), path, page, size, sort, includeDirectorySizes);
   }

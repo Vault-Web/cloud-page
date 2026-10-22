@@ -248,6 +248,27 @@ class FolderControllerTest {
   // ── GET /api/folders/content ───────────────────────────────────────────────
 
   @Test
+  void getFolderContent_explicitDuplicateBadgesEnablesTheOptionalScan() throws Exception {
+    FolderContentItemDto file =
+        new FolderContentItemDto("a.txt", "a.txt", false, 4L, "text/plain", FIXED_TIME);
+    file.setDuplicate(true);
+    when(folderService.getFolderContentPage(
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(true), eq(true)))
+        .thenReturn(new PageResponseDto<>(List.of(file), 1L, 1, 0));
+    mockMvc
+        .perform(
+            get("/api/folders/content")
+                .param("page", "0")
+                .param("size", "10")
+                .param("includeDuplicates", "true"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content[0].duplicate").value(true));
+    verify(folderService)
+        .getFolderContentPage(
+            eq(tempDir.toString()), eq(""), eq(0), eq(10), eq(null), eq(true), eq(true));
+  }
+
+  @Test
   void getFolderContent_validRequest_returnsPageResponse() throws Exception {
     List<FolderContentItemDto> content =
         Arrays.asList(

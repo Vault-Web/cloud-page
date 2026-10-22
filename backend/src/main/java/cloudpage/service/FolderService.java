@@ -9,6 +9,7 @@ import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -31,6 +33,23 @@ import org.springframework.stereotype.Service;
 public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
+  private final DuplicateDetector duplicateDetector;
+
+  public FolderService() {
+    this(new DuplicateDetector());
+  }
+
+  FolderService(DuplicateDetector duplicateDetector) {
+    this.duplicateDetector = duplicateDetector;
+  }
+
+  private void markDuplicatesForPage(Path rootReal, Path folder, List<FolderContentItemDto> items) {
+    try {
+      duplicateDetector.markDuplicates(rootReal, folder, items);
+    } catch (IOException | UncheckedIOException | InvalidPathException exception) {
+      // Duplicate flags are advisory: an unreadable scan must not break a valid listing.
+    }
+  }
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
       Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
@@ -52,6 +71,21 @@ public class FolderService {
     String extension = matcher.group(2);
 
     return baseName + (extension != null ? extension : "");
+  }
+
+  /**
+   * An unsafe or dangling child link must not make its parent impossible to list. Requested folders
+   * themselves are still validated strictly by the public entry points.
+   */
+  private Path resolveListedChild(Path rootReal, Path childPath) throws IOException {
+    if (Files.isSymbolicLink(childPath) && !Files.exists(childPath)) {
+      return null;
+    }
+    try {
+      return FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+    } catch (InvalidPathException exception) {
+      return null;
+    }
   }
 
   /**
@@ -280,6 +314,19 @@ public class FolderService {
       String sort,
       boolean includeDirectorySizes)
       throws IOException {
+    return getFolderContentPage(
+        rootPath, relativePath, page, size, sort, includeDirectorySizes, false);
+  }
+
+  public PageResponseDto<FolderContentItemDto> getFolderContentPage(
+      String rootPath,
+      String relativePath,
+      int page,
+      int size,
+      String sort,
+      boolean includeDirectorySizes,
+      boolean includeDuplicates)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -311,7 +358,10 @@ public class FolderService {
               .map(
                   path -> {
                     try {
-                      Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
+                      Path pathReal = resolveListedChild(rootReal, path);
+                      if (pathReal == null) {
+                        return null;
+                      }
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
@@ -368,6 +418,7 @@ public class FolderService {
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
                     }
                   })
+              .filter(Objects::nonNull)
               .collect(Collectors.toList());
     }
 
@@ -382,6 +433,9 @@ public class FolderService {
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
+    if (includeDuplicates) {
+      markDuplicatesForPage(rootReal, folder, pageContent);
+    }
     resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
@@ -509,8 +563,10 @@ public class FolderService {
               childPath -> {
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal =
-                      FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+                  Path childPathReal = resolveListedChild(rootReal, childPath);
+                  if (childPathReal == null) {
+                    return;
+                  }
 
                   if (Files.isDirectory(childPath)) {
                     subfolders.add(
@@ -604,7 +660,9 @@ public class FolderService {
           .filter(
               childPath -> {
                 try {
-                  FileUtils.validatePath(rootReal, childPath);
+                  if (resolveListedChild(rootReal, childPath) == null) {
+                    return false;
+                  }
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while counting: "

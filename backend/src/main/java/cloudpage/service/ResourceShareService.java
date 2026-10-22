@@ -283,7 +283,8 @@ public class ResourceShareService {
       throw new ResourceNotFoundException("Shared folder", "path", folderPath);
     }
     String relativeFolder = resolved.ownerRoot().relativize(resolved.target()).toString();
-    fileService.uploadFile(
+    // The share response does not expose owner-wide duplicate information, so do not scan for it.
+    fileService.uploadFileWithoutDuplicateHints(
         resolved.ownerRoot().toString(), relativeFolder, file, resolved.ownerQuotaMb());
   }
 

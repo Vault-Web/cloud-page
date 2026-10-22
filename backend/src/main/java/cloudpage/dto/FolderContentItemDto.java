@@ -17,6 +17,7 @@ public class FolderContentItemDto {
   private long lastModifiedAt;
   private boolean conflict;
   private String originalPath;
+  private boolean duplicate;
 
   public FolderContentItemDto(
       String name,
@@ -25,6 +26,18 @@ public class FolderContentItemDto {
       long size,
       String mimeType,
       long lastModifiedAt) {
-    this(name, path, directory, size, mimeType, lastModifiedAt, false, null);
+    this(name, path, directory, size, mimeType, lastModifiedAt, false, null, false);
+  }
+
+  public FolderContentItemDto(
+      String name,
+      String path,
+      boolean directory,
+      long size,
+      String mimeType,
+      long lastModifiedAt,
+      boolean conflict,
+      String originalPath) {
+    this(name, path, directory, size, mimeType, lastModifiedAt, conflict, originalPath, false);
   }
 }
