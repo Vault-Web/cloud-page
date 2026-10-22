@@ -271,7 +271,8 @@ public class ResourceShareService {
   /**
    * Adds a new file to a folder share. Requires EDIT. The file lands in the owner's storage and
    * counts against the owner's quota, so collaborators cannot fill their own space with someone
-   * else's shared folder.
+   * else's shared folder. Existing names are rejected, just like a direct upload; intentional
+   * replacements must use {@link #editFile(String, User, String, MultipartFile, String)} instead.
    */
   public void uploadToShare(String shareId, User recipient, String folderPath, MultipartFile file)
       throws IOException {
@@ -283,7 +284,8 @@ public class ResourceShareService {
       throw new ResourceNotFoundException("Shared folder", "path", folderPath);
     }
     String relativeFolder = resolved.ownerRoot().relativize(resolved.target()).toString();
-    fileService.uploadFile(
+    // The share response does not expose owner-wide duplicate information, so do not scan for it.
+    fileService.uploadFileWithoutDuplicateHints(
         resolved.ownerRoot().toString(), relativeFolder, file, resolved.ownerQuotaMb());
   }
 

@@ -5,7 +5,9 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import cloudpage.dto.DuplicateFileDto;
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceConflictException;
@@ -20,6 +22,7 @@ import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -96,6 +99,26 @@ class FileControllerTest {
                 .param("folderPath", "docs")
                 .header(HttpHeaders.IF_MATCH, "\"stale-etag\""))
         .andExpect(status().isPreconditionFailed());
+  }
+
+  @Test
+  void uploadFile_duplicate_returnsDuplicateInfo() throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile("file", "copy.txt", "text/plain", "same content".getBytes());
+
+    UploadResultDto result =
+        new UploadResultDto(
+            true, List.of(new DuplicateFileDto("original.txt", "docs/original.txt")));
+
+    when(fileService.uploadFile(eq(tempDir.toString()), eq("docs"), any(), any(), isNull()))
+        .thenReturn(result);
+
+    mockMvc
+        .perform(multipart("/api/files/upload").file(file).param("folderPath", "docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.duplicate").value(true))
+        .andExpect(jsonPath("$.duplicates[0].fileName").value("original.txt"))
+        .andExpect(jsonPath("$.duplicates[0].filePath").value("docs/original.txt"));
   }
 
   // ── GET /api/files/content ───────────────────────────────────────────────

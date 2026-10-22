@@ -760,6 +760,95 @@ class FolderServiceTest {
   }
 
   @Test
+  void getFolderContentPage_marksDuplicateFiles() throws IOException {
+    Files.writeString(tempDir.resolve("original.txt"), "same content");
+    Files.writeString(tempDir.resolve("copy.txt"), "same content");
+    Files.writeString(tempDir.resolve("unique.txt"), "different content");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null, true, true);
+
+    FolderContentItemDto original =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("original.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    FolderContentItemDto copy =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("copy.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    FolderContentItemDto unique =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("unique.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(original.isDuplicate());
+    assertTrue(copy.isDuplicate());
+    assertFalse(unique.isDuplicate());
+  }
+
+  @Test
+  void getFolderContentPage_marksDuplicateWhenCopyIsInAnotherFolder() throws IOException {
+    Files.writeString(tempDir.resolve("original.txt"), "same content");
+
+    Path archive = Files.createDirectory(tempDir.resolve("archive"));
+    Files.writeString(archive.resolve("copy.txt"), "same content");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null, true, true);
+
+    FolderContentItemDto original =
+        result.getContent().stream()
+            .filter(item -> item.getName().equals("original.txt"))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(original.isDuplicate());
+  }
+
+  @Test
+  void getFolderContentPage_emptyFilesAreNotMarkedAsDuplicates() throws IOException {
+    Files.write(tempDir.resolve("first.txt"), new byte[0]);
+    Files.write(tempDir.resolve("second.txt"), new byte[0]);
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 20, "name,asc", true, true);
+    assertTrue(
+        result.getContent().stream()
+            .filter(
+                item -> item.getName().equals("first.txt") || item.getName().equals("second.txt"))
+            .noneMatch(FolderContentItemDto::isDuplicate));
+  }
+
+  @Test
+  void getFolderContentPage_detectsDuplicatesInLargeTree() throws IOException {
+    for (int i = 1; i <= 100; i++) {
+      Files.writeString(tempDir.resolve("file-" + i + ".txt"), "x".repeat(i));
+    }
+
+    Files.writeString(tempDir.resolve("duplicate-a.txt"), "duplicate-content");
+    Files.writeString(tempDir.resolve("duplicate-b.txt"), "duplicate-content");
+
+    PageResponseDto<FolderContentItemDto> result =
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 200, "name,asc", true, true);
+
+    List<FolderContentItemDto> duplicates =
+        result.getContent().stream().filter(FolderContentItemDto::isDuplicate).toList();
+
+    assertEquals(2, duplicates.size());
+    assertTrue(
+        duplicates.stream()
+            .allMatch(
+                item ->
+                    item.getName().equals("duplicate-a.txt")
+                        || item.getName().equals("duplicate-b.txt")));
+  }
+
+  @Test
   void getFolderContentPage_detectsSyncthingConflictFile() throws IOException {
     Files.writeString(tempDir.resolve("thesis.md"), "original");
     Files.writeString(
