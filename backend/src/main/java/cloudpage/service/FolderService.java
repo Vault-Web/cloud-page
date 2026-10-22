@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -52,6 +53,21 @@ public class FolderService {
     String extension = matcher.group(2);
 
     return baseName + (extension != null ? extension : "");
+  }
+
+  /**
+   * An unsafe or dangling child link must not make its parent impossible to list. Requested folders
+   * themselves are still validated strictly by the public entry points.
+   */
+  private Path resolveListedChild(Path rootReal, Path childPath) throws IOException {
+    if (Files.isSymbolicLink(childPath) && !Files.exists(childPath)) {
+      return null;
+    }
+    try {
+      return FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+    } catch (InvalidPathException exception) {
+      return null;
+    }
   }
 
   /**
@@ -311,7 +327,10 @@ public class FolderService {
               .map(
                   path -> {
                     try {
-                      Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
+                      Path pathReal = resolveListedChild(rootReal, path);
+                      if (pathReal == null) {
+                        return null;
+                      }
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
@@ -368,6 +387,7 @@ public class FolderService {
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
                     }
                   })
+              .filter(Objects::nonNull)
               .collect(Collectors.toList());
     }
 
@@ -509,8 +529,10 @@ public class FolderService {
               childPath -> {
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal =
-                      FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+                  Path childPathReal = resolveListedChild(rootReal, childPath);
+                  if (childPathReal == null) {
+                    return;
+                  }
 
                   if (Files.isDirectory(childPath)) {
                     subfolders.add(
@@ -604,7 +626,9 @@ public class FolderService {
           .filter(
               childPath -> {
                 try {
-                  FileUtils.validatePath(rootReal, childPath);
+                  if (resolveListedChild(rootReal, childPath) == null) {
+                    return false;
+                  }
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while counting: "
