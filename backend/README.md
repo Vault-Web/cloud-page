@@ -291,7 +291,7 @@ Folder badges can be requested with
 to `false`, so existing listing requests do not traverse the storage tree or hash
 file contents for duplicate detection. The existing `duplicate` response property
 is an advisory match flag; a false value is not proof of uniqueness, especially
-when detection was not requested or some files could not be read.
+when detection was not requested, its budget was exhausted, or some files could not be read.
 
 The upload's checksum is calculated while copying its incoming bytes, inside the
 existing edit lock after precondition and quota validation. Detection runs only
@@ -303,6 +303,17 @@ are limited to size groups represented on the requested page, skip unique-size
 groups, and hash each candidate at most once per request. There are no persistent
 checksum or directory-index caches, so mutations are reflected on the next scan
 and deleted/moved files do not leave unbounded server-side cache entries.
+
+Each upload or optional listing scan has its own budget: at most 10,000 visited
+filesystem entries (including directories), 1,000 hashed candidates, and 64 MiB
+of existing-file content read. These limits are shared across all size groups in
+that request. Oversized candidates are skipped without opening their contents;
+files growing during a read cannot exceed the byte budget. Results can therefore
+be incomplete, but any reported match has a complete SHA-256 checksum. Exhausting
+a budget does not reject or roll back a saved upload. Concurrent requests each
+have their own limits; this is a work bound, not a wall-clock timeout or a global
+I/O concurrency limit. Hashing the incoming upload itself remains part of saving
+its bytes and is separate from this advisory scan budget.
 
 Share uploads do not return owner-wide duplicate hints and therefore skip both
 the duplicate scan and the extra checksum calculation entirely.

@@ -30,6 +30,114 @@ class DuplicateDetectionReliabilityTest {
   @TempDir Path root;
 
   @Test
+  void metadataBudgetStopsTraversalBeforeHashing() throws IOException {
+    Files.createDirectory(root.resolve("nested"));
+    Files.writeString(root.resolve("nested/a.txt"), "same");
+    try (var checksums = mockStatic(ChecksumUtils.class, CALLS_REAL_METHODS)) {
+      assertTrue(
+          new DuplicateDetector(1, 10, 100)
+              .findDuplicates(root, root.resolve("upload.txt"), "unused", 4)
+              .isEmpty());
+      checksums.verifyNoInteractions();
+    }
+  }
+
+  @Test
+  void candidateBudgetIsSharedAcrossTheEntireListingScan() throws IOException {
+    Files.writeString(root.resolve("a.txt"), "same");
+    Files.writeString(root.resolve("b.txt"), "same");
+    Files.writeString(root.resolve("c.txt"), "other");
+    Files.writeString(root.resolve("d.txt"), "other");
+    try (var checksums = mockStatic(ChecksumUtils.class, CALLS_REAL_METHODS)) {
+      var page =
+          new FolderService(new DuplicateDetector(100, 1, 100))
+              .getFolderContentPage(root.toString(), "", 0, 10, null, true, true);
+      assertTrue(page.getContent().stream().noneMatch(item -> item.isDuplicate()));
+      checksums.verify(() -> ChecksumUtils.newDigest("SHA-256"), times(1));
+    }
+  }
+
+  @Test
+  void byteBudgetIsSharedAcrossCandidatesAndResetsForEachRequest() throws IOException {
+    Files.writeString(root.resolve("a.txt"), "same");
+    Files.writeString(root.resolve("b.txt"), "same");
+    DuplicateDetector detector = new DuplicateDetector(100, 10, 4);
+    String checksum =
+        ChecksumUtils.calculateChecksum(new ByteArrayInputStream("same".getBytes()), "SHA-256");
+    try (var checksums = mockStatic(ChecksumUtils.class, CALLS_REAL_METHODS)) {
+      assertEquals(
+          1, detector.findDuplicates(root, root.resolve("upload.txt"), checksum, 4).size());
+      assertEquals(
+          1, detector.findDuplicates(root, root.resolve("upload.txt"), checksum, 4).size());
+      checksums.verify(() -> ChecksumUtils.newDigest("SHA-256"), times(2));
+    }
+  }
+
+  @Test
+  void candidateLargerThanRemainingBudgetIsNotRead() throws IOException {
+    Files.writeString(root.resolve("a.txt"), "same");
+    try (var checksums = mockStatic(ChecksumUtils.class, CALLS_REAL_METHODS)) {
+      assertTrue(
+          new DuplicateDetector(100, 10, 3)
+              .findDuplicates(root, root.resolve("upload.txt"), "unused", 4)
+              .isEmpty());
+      checksums.verifyNoInteractions();
+    }
+  }
+
+  @Test
+  void growingCandidateCannotEscapeTheByteBudgetOrProduceAPartialMatch() throws IOException {
+    Path candidate = Files.writeString(root.resolve("existing.txt"), "same");
+    String checksum =
+        ChecksumUtils.calculateChecksum(new ByteArrayInputStream("same".getBytes()), "SHA-256");
+    int[] bytesRead = {0};
+    boolean[] closed = {false};
+    var growingInput =
+        new java.io.FilterInputStream(Files.newInputStream(candidate)) {
+          @Override
+          public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = super.read(buffer, offset, length);
+            if (read > 0) {
+              bytesRead[0] += read;
+              Files.writeString(candidate, "more", java.nio.file.StandardOpenOption.APPEND);
+            }
+            return read;
+          }
+
+          @Override
+          public void close() throws IOException {
+            closed[0] = true;
+            super.close();
+          }
+        };
+    try (growingInput;
+        var files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+      files
+          .when(() -> Files.newInputStream(candidate, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+          .thenReturn(growingInput);
+      assertTrue(
+          new DuplicateDetector(100, 10, 4)
+              .findDuplicates(root, root.resolve("upload.txt"), checksum, 4)
+              .isEmpty());
+      assertEquals(4, bytesRead[0]);
+      assertTrue(closed[0]);
+      assertEquals(8, Files.size(candidate));
+    }
+  }
+
+  @Test
+  void exhaustedDetectionBudgetStillReturnsASuccessfullySavedUpload() throws IOException {
+    Files.writeString(root.resolve("existing.txt"), "saved");
+    var result =
+        new FileService(new DuplicateDetector(100, 10, 1))
+            .uploadFile(root.toString(), "", file("saved"), null);
+    assertEquals("saved", Files.readString(root.resolve("a.txt")));
+    assertEquals("saved", Files.readString(root.resolve("existing.txt")));
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+  }
+
+  @Test
   void sharedUploadDoesNotScanTheOwnersStorageForUnusedHints() throws IOException {
     DuplicateDetector detector = mock(DuplicateDetector.class);
     ResourceShareRepository shares = mock(ResourceShareRepository.class);
