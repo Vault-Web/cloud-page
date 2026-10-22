@@ -6,6 +6,12 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import cloudpage.exceptions.ResourceConflictException;
+import cloudpage.model.ResourceShare;
+import cloudpage.model.SharePermission;
+import cloudpage.model.SharedResourceType;
+import cloudpage.model.User;
+import cloudpage.repository.ResourceShareRepository;
+import cloudpage.repository.UserRepository;
 import cloudpage.util.ChecksumUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -14,12 +20,48 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 
 class DuplicateDetectionReliabilityTest {
   @TempDir Path root;
+
+  @Test
+  void sharedUploadDoesNotScanTheOwnersStorageForUnusedHints() throws IOException {
+    DuplicateDetector detector = mock(DuplicateDetector.class);
+    ResourceShareRepository shares = mock(ResourceShareRepository.class);
+    UserRepository users = mock(UserRepository.class);
+    User owner = new User();
+    owner.setId("owner");
+    owner.setRootFolderPath(root.toString());
+    User recipient = new User();
+    recipient.setId("recipient");
+    ResourceShare share = new ResourceShare();
+    share.setOwnerId("owner");
+    share.setRecipientId("recipient");
+    share.setRelativePath("docs");
+    share.setResourceType(SharedResourceType.FOLDER);
+    share.setPermissions(Set.of(SharePermission.EDIT));
+    when(users.findById("owner")).thenReturn(Optional.of(owner));
+    when(shares.findByIdAndRecipientIdAndRevokedAtIsNull("share", "recipient"))
+        .thenReturn(Optional.of(share));
+    Files.createDirectory(root.resolve("docs"));
+    ResourceShareService service =
+        new ResourceShareService(
+            shares,
+            users,
+            new FolderService(),
+            new FileService(detector),
+            mock(TrashService.class));
+
+    service.uploadToShare("share", recipient, "", file("saved"));
+
+    assertEquals("saved", Files.readString(root.resolve("docs/a.txt")));
+    verifyNoInteractions(detector);
+  }
 
   @Test
   void ordinaryListingDoesNotStartADuplicateScan() throws IOException {
