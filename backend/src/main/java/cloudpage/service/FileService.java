@@ -5,6 +5,7 @@ import cloudpage.dto.FileResource;
 import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.util.ChecksumUtils;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -126,7 +128,8 @@ public class FileService {
   /**
    * Uploads a file into the given folder, creating the folder if it does not yet exist. When a
    * quota is supplied, the upload is rejected if it would push the user's active storage usage
-   * beyond the limit. An existing file with the same name is overwritten.
+   * beyond the limit. If a file with the same name already exists, the upload is rejected unless a
+   * matching {@code If-Match} ETag (or {@code *}) is supplied.
    *
    * @param rootPath the root directory of the user, used as a security boundary
    * @param relativeFolderPath the relative path of the destination folder
@@ -135,6 +138,8 @@ public class FileService {
    * @throws IOException if the folder cannot be created or the file cannot be written
    * @throws InvalidPathException if the file name is missing or the destination resolves outside
    *     the user's root directory or addresses the reserved trash directory
+   * @throws ResourceAlreadyExistsException if a file with the same name exists and no {@code
+   *     If-Match} value was supplied
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
   public UploadResultDto uploadFile(
@@ -195,6 +200,11 @@ public class FileService {
     withEditLock(
         target,
         () -> {
+          boolean exists = Files.exists(target, LinkOption.NOFOLLOW_LINKS);
+          if (exists && (expectedETag == null || expectedETag.isBlank())) {
+            throw new ResourceAlreadyExistsException(
+                "\"" + fileName + "\" already exists in this folder");
+          }
           checkIfMatch(target, expectedETag);
 
           if (Files.isRegularFile(target)) {

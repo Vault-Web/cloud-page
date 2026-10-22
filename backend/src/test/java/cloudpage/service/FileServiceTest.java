@@ -6,6 +6,7 @@ import cloudpage.dto.FileResource;
 import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import java.io.IOException;
@@ -175,16 +176,40 @@ class FileServiceTest {
   }
 
   @Test
-  void uploadFile_replacesExistingFile() throws IOException {
+  void uploadFile_existingFile_noETag_throwsAndKeepsOriginal() throws IOException {
     Path dir = Files.createDirectory(tempDir.resolve("docs"));
     Files.writeString(dir.resolve("file.txt"), "old content");
-
     MockMultipartFile file =
         new MockMultipartFile("file", "file.txt", "text/plain", "new content".getBytes());
 
-    fileService.uploadFile(tempDir.toString(), "docs", file, null);
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "docs", file, null));
+    assertEquals("old content", Files.readString(dir.resolve("file.txt")));
+  }
 
-    assertEquals("new content", Files.readString(dir.resolve("file.txt")));
+  @Test
+  void uploadFile_existingFile_blankETag_throws() throws IOException {
+    Files.writeString(tempDir.resolve("file.txt"), "old content");
+    MockMultipartFile file =
+        new MockMultipartFile("file", "file.txt", "text/plain", "new".getBytes());
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null, "  "));
+    assertEquals("old content", Files.readString(tempDir.resolve("file.txt")));
+  }
+
+  @Test
+  void uploadFile_directoryWithSameName_throws() throws IOException {
+    Files.createDirectory(tempDir.resolve("report"));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "report", "text/plain", "data".getBytes());
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "", file, null));
+    assertTrue(Files.isDirectory(tempDir.resolve("report")));
   }
 
   @Test
@@ -282,7 +307,7 @@ class FileServiceTest {
         new MockMultipartFile(
             "file", "full.bin", "application/octet-stream", new byte[1024 * 1024]);
 
-    assertDoesNotThrow(() -> fileService.uploadFile(tempDir.toString(), "", file, 1L));
+    assertDoesNotThrow(() -> fileService.uploadFile(tempDir.toString(), "", file, 1L, "*"));
     assertEquals(1024 * 1024, Files.size(target));
   }
 
