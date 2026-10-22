@@ -304,6 +304,9 @@ groups, and hash each candidate at most once per request. There are no persisten
 checksum or directory-index caches, so mutations are reflected on the next scan
 and deleted/moved files do not leave unbounded server-side cache entries.
 
+Share uploads do not return owner-wide duplicate hints and therefore skip both
+the duplicate scan and the extra checksum calculation entirely.
+
 Deploy this PR independently first. The frontend integration for upload warnings
 and optional badges is separate. Before enabling the stricter name-conflict
 behavior in backend PR #186, deploy the editor changes in Vault-Web/vault-web #400.

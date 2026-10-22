@@ -150,6 +150,23 @@ public class FileService {
       Long quotaMb,
       String expectedETag)
       throws IOException {
+    return uploadFile(rootPath, relativeFolderPath, file, quotaMb, expectedETag, true);
+  }
+
+  void uploadFileWithoutDuplicateHints(
+      String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
+      throws IOException {
+    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null, false);
+  }
+
+  private UploadResultDto uploadFile(
+      String rootPath,
+      String relativeFolderPath,
+      MultipartFile file,
+      Long quotaMb,
+      String expectedETag,
+      boolean includeDuplicateHints)
+      throws IOException {
     FileUtils.rejectTrashPath(Paths.get(relativeFolderPath).normalize());
     Path folder = Paths.get(rootPath, relativeFolderPath).normalize();
     FileUtils.validatePath(rootPath, folder);
@@ -174,7 +191,7 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
-    var digest = ChecksumUtils.newDigest(CHECKSUM_ALGORITHM);
+    var digest = includeDuplicateHints ? ChecksumUtils.newDigest(CHECKSUM_ALGORITHM) : null;
     withEditLock(
         target,
         () -> {
@@ -186,11 +203,17 @@ public class FileService {
             FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
           }
 
-          try (InputStream input = new DigestInputStream(file.getInputStream(), digest)) {
+          try (InputStream input =
+              includeDuplicateHints
+                  ? new DigestInputStream(file.getInputStream(), digest)
+                  : file.getInputStream()) {
             Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
           }
         });
 
+    if (!includeDuplicateHints) {
+      return new UploadResultDto(false, List.of());
+    }
     List<DuplicateFileDto> duplicates;
     try {
       duplicates =
