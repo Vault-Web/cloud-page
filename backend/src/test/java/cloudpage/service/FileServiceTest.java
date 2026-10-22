@@ -155,7 +155,7 @@ class FileServiceTest {
     MockMultipartFile file =
         new MockMultipartFile("file", "report.txt", "text/plain", "same content".getBytes());
 
-    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null);
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null, "*");
 
     assertFalse(result.isDuplicate());
     assertTrue(result.getDuplicates().isEmpty());

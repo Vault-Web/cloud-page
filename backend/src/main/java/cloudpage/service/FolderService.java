@@ -5,11 +5,11 @@ import cloudpage.exceptions.FileAccessException;
 import cloudpage.exceptions.FileDeletionException;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
-import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -19,14 +19,9 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -38,78 +33,23 @@ import org.springframework.stereotype.Service;
 public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
+  private final DuplicateDetector duplicateDetector;
 
-  private final Map<Path, CachedChecksum> checksumCache = new ConcurrentHashMap<>();
-  private final Map<Path, DuplicateIndex> duplicateIndexCache = new ConcurrentHashMap<>();
-
-  private static final long DUPLICATE_INDEX_TTL_MS = 30_000L;
-
-  private record CachedChecksum(long size, long lastModified, String checksum) {}
-
-  private record DuplicateIndex(long createdAt, Map<Long, List<Path>> filesBySize) {}
-
-  private String getCachedChecksum(Path path) throws IOException {
-    BasicFileAttributes attrs =
-        Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-    long size = attrs.size();
-    long lastModified = attrs.lastModifiedTime().toMillis();
-
-    CachedChecksum cached = checksumCache.get(path);
-
-    if (cached != null && cached.size() == size && cached.lastModified() == lastModified) {
-      return cached.checksum();
-    }
-
-    String checksum;
-
-    try (InputStream inputStream = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
-      checksum = ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
-    }
-
-    checksumCache.put(path, new CachedChecksum(size, lastModified, checksum));
-
-    return checksum;
+  public FolderService() {
+    this(new DuplicateDetector());
   }
 
-  private DuplicateIndex getDuplicateIndex(Path rootReal) throws IOException {
-    long now = System.currentTimeMillis();
-
-    DuplicateIndex cached = duplicateIndexCache.get(rootReal);
-
-    if (cached != null && now - cached.createdAt() < DUPLICATE_INDEX_TTL_MS) {
-      return cached;
-    }
-
-    Map<Long, List<Path>> filesBySize = new HashMap<>();
-    Path trashDir = rootReal.resolve(FileUtils.TRASH_DIR);
-
-    Files.walkFileTree(
-        rootReal,
-        new SimpleFileVisitor<>() {
-          @Override
-          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            if (attrs.isRegularFile() && attrs.size() > 0 && !file.startsWith(trashDir)) {
-
-              filesBySize.computeIfAbsent(attrs.size(), key -> new ArrayList<>()).add(file);
-            }
-
-            return FileVisitResult.CONTINUE;
-          }
-
-          @Override
-          public FileVisitResult visitFileFailed(Path file, IOException exc) {
-            return FileVisitResult.CONTINUE;
-          }
-        });
-
-    DuplicateIndex index = new DuplicateIndex(now, filesBySize);
-    duplicateIndexCache.put(rootReal, index);
-
-    return index;
+  FolderService(DuplicateDetector duplicateDetector) {
+    this.duplicateDetector = duplicateDetector;
   }
 
-  private static final String CHECKSUM_ALGORITHM = "SHA-256";
+  private void markDuplicatesForPage(Path rootReal, Path folder, List<FolderContentItemDto> items) {
+    try {
+      duplicateDetector.markDuplicates(rootReal, folder, items);
+    } catch (IOException | UncheckedIOException | InvalidPathException exception) {
+      // Duplicate flags are advisory: an unreadable scan must not break a valid listing.
+    }
+  }
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
       Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
@@ -118,56 +58,6 @@ public class FolderService {
 
   private boolean isSyncthingConflict(String fileName) {
     return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
-  }
-
-  private void markDuplicatesForPage(Path rootReal, List<FolderContentItemDto> pageContent)
-      throws IOException {
-
-    Set<Long> relevantSizes = new HashSet<>();
-
-    for (FolderContentItemDto item : pageContent) {
-      if (!item.isDirectory() && item.getSize() > 0) {
-        relevantSizes.add(item.getSize());
-      }
-    }
-
-    if (relevantSizes.isEmpty()) {
-      return;
-    }
-
-    DuplicateIndex duplicateIndex = getDuplicateIndex(rootReal);
-    Map<Long, List<Path>> candidatesBySize = duplicateIndex.filesBySize();
-
-    for (FolderContentItemDto item : pageContent) {
-      if (item.isDirectory() || item.getSize() == 0) {
-        continue;
-      }
-
-      Path currentPath = rootReal.resolve(item.getPath()).normalize();
-
-      String currentChecksum;
-
-      try {
-        currentChecksum = getCachedChecksum(currentPath);
-      } catch (IOException e) {
-        continue;
-      }
-
-      for (Path candidate : candidatesBySize.getOrDefault(item.getSize(), List.of())) {
-        if (candidate.normalize().equals(currentPath)) {
-          continue;
-        }
-
-        try {
-          if (getCachedChecksum(candidate).equals(currentChecksum)) {
-            item.setDuplicate(true);
-            break;
-          }
-        } catch (IOException e) {
-          continue;
-        }
-      }
-    }
   }
 
   private String inferOriginalFileName(String fileName) {
@@ -181,6 +71,21 @@ public class FolderService {
     String extension = matcher.group(2);
 
     return baseName + (extension != null ? extension : "");
+  }
+
+  /**
+   * An unsafe or dangling child link must not make its parent impossible to list. Requested folders
+   * themselves are still validated strictly by the public entry points.
+   */
+  private Path resolveListedChild(Path rootReal, Path childPath) throws IOException {
+    if (Files.isSymbolicLink(childPath) && !Files.exists(childPath)) {
+      return null;
+    }
+    try {
+      return FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+    } catch (InvalidPathException exception) {
+      return null;
+    }
   }
 
   /**
@@ -409,6 +314,19 @@ public class FolderService {
       String sort,
       boolean includeDirectorySizes)
       throws IOException {
+    return getFolderContentPage(
+        rootPath, relativePath, page, size, sort, includeDirectorySizes, false);
+  }
+
+  public PageResponseDto<FolderContentItemDto> getFolderContentPage(
+      String rootPath,
+      String relativePath,
+      int page,
+      int size,
+      String sort,
+      boolean includeDirectorySizes,
+      boolean includeDuplicates)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -440,14 +358,13 @@ public class FolderService {
               .map(
                   path -> {
                     try {
-                      if (Files.isSymbolicLink(path)) {
+                      Path pathReal = resolveListedChild(rootReal, path);
+                      if (pathReal == null) {
                         return null;
                       }
-                      Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
-                      boolean duplicate = false;
                       String fileName = path.getFileName().toString();
                       boolean conflict = !isDirectory && isSyncthingConflict(fileName);
 
@@ -495,8 +412,7 @@ public class FolderService {
                           null,
                           lastModifiedAt,
                           conflict,
-                          originalPath,
-                          duplicate);
+                          originalPath);
                     } catch (IOException e) {
                       throw new InvalidPathException(
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
@@ -517,8 +433,9 @@ public class FolderService {
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
-    markDuplicatesForPage(rootReal, pageContent);
-
+    if (includeDuplicates) {
+      markDuplicatesForPage(rootReal, folder, pageContent);
+    }
     resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);
@@ -644,13 +561,12 @@ public class FolderService {
           .filter(childPath -> !childPath.normalize().equals(trashDir))
           .forEach(
               childPath -> {
-                if (Files.isSymbolicLink(childPath)) {
-                  return;
-                }
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal =
-                      FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+                  Path childPathReal = resolveListedChild(rootReal, childPath);
+                  if (childPathReal == null) {
+                    return;
+                  }
 
                   if (Files.isDirectory(childPath)) {
                     subfolders.add(
@@ -744,7 +660,9 @@ public class FolderService {
           .filter(
               childPath -> {
                 try {
-                  FileUtils.validatePath(rootReal, childPath);
+                  if (resolveListedChild(rootReal, childPath) == null) {
+                    return false;
+                  }
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while counting: "

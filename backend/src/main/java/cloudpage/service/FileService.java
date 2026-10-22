@@ -11,8 +11,14 @@ import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.*;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.DigestInputStream;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +35,16 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class FileService {
+  private final DuplicateDetector duplicateDetector;
+
+  public FileService() {
+    this(new DuplicateDetector());
+  }
+
+  FileService(DuplicateDetector duplicateDetector) {
+    this.duplicateDetector = duplicateDetector;
+  }
+
   private final ConcurrentHashMap<Path, EditLock> editLocks = new ConcurrentHashMap<>();
 
   /** A per-file lock together with the number of threads currently holding or awaiting it. */
@@ -158,6 +174,7 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
+    var digest = ChecksumUtils.newDigest(CHECKSUM_ALGORITHM);
     withEditLock(
         target,
         () -> {
@@ -169,18 +186,23 @@ public class FileService {
             FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
           }
 
-          Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+          try (InputStream input = new DigestInputStream(file.getInputStream(), digest)) {
+            Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+          }
         });
 
-    String checksum;
-
-    try (InputStream inputStream = Files.newInputStream(target)) {
-      checksum = calculateChecksum(inputStream);
+    List<DuplicateFileDto> duplicates;
+    try {
+      duplicates =
+          duplicateDetector.findDuplicates(
+              Paths.get(rootPath),
+              target,
+              HexFormat.of().formatHex(digest.digest()),
+              file.getSize());
+    } catch (IOException | UncheckedIOException | InvalidPathException exception) {
+      // The write succeeded. Advisory duplicate hints must never turn it into a failed upload.
+      duplicates = List.of();
     }
-
-    List<DuplicateFileDto> duplicates =
-        findDuplicates(rootPath, checksum, target, Files.size(target));
-
     return new UploadResultDto(!duplicates.isEmpty(), duplicates);
   }
 
@@ -238,46 +260,6 @@ public class FileService {
 
   private String calculateChecksum(InputStream inputStream) throws IOException {
     return ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
-  }
-
-  private List<DuplicateFileDto> findDuplicates(
-      String rootPath, String checksum, Path target, long fileSize) throws IOException {
-    Path root = Paths.get(rootPath).toRealPath();
-
-    if (fileSize == 0) {
-      return List.of();
-    }
-
-    try (var stream = Files.walk(root)) {
-      return stream
-          .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-          .filter(path -> !path.startsWith(root.resolve(FileUtils.TRASH_DIR)))
-          .filter(path -> !path.normalize().equals(target.normalize()))
-          .filter(
-              path -> {
-                try {
-                  return Files.size(path) == fileSize;
-                } catch (IOException e) {
-                  return false;
-                }
-              })
-          .filter(
-              path -> {
-                try {
-                  String relativePath = root.relativize(path).toString();
-                  return calculateChecksum(rootPath, relativePath).equals(checksum);
-                } catch (IOException e) {
-                  return false;
-                }
-              })
-          .map(
-              path -> {
-                String relativePath = root.relativize(path).toString().replace('\\', '/');
-
-                return new DuplicateFileDto(path.getFileName().toString(), relativePath);
-              })
-          .toList();
-    }
   }
 
   /**

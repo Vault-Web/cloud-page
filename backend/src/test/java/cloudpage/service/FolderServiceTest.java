@@ -766,7 +766,7 @@ class FolderServiceTest {
     Files.writeString(tempDir.resolve("unique.txt"), "different content");
 
     PageResponseDto<FolderContentItemDto> result =
-        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null, true, true);
 
     FolderContentItemDto original =
         result.getContent().stream()
@@ -799,7 +799,7 @@ class FolderServiceTest {
     Files.writeString(archive.resolve("copy.txt"), "same content");
 
     PageResponseDto<FolderContentItemDto> result =
-        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null);
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 10, null, true, true);
 
     FolderContentItemDto original =
         result.getContent().stream()
@@ -816,7 +816,7 @@ class FolderServiceTest {
     Files.write(tempDir.resolve("second.txt"), new byte[0]);
 
     PageResponseDto<FolderContentItemDto> result =
-        folderService.getFolderContentPage(tempDir.toString(), "", 0, 20, "name,asc");
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 20, "name,asc", true, true);
     assertTrue(
         result.getContent().stream()
             .filter(
@@ -834,7 +834,7 @@ class FolderServiceTest {
     Files.writeString(tempDir.resolve("duplicate-b.txt"), "duplicate-content");
 
     PageResponseDto<FolderContentItemDto> result =
-        folderService.getFolderContentPage(tempDir.toString(), "", 0, 200, "name,asc");
+        folderService.getFolderContentPage(tempDir.toString(), "", 0, 200, "name,asc", true, true);
 
     List<FolderContentItemDto> duplicates =
         result.getContent().stream().filter(FolderContentItemDto::isDuplicate).toList();
