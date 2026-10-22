@@ -1,22 +1,27 @@
 package cloudpage.service;
 
+import cloudpage.dto.DuplicateFileDto;
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceAlreadyExistsException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.security.DigestInputStream;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,6 +37,16 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class FileService {
+  private final DuplicateDetector duplicateDetector;
+
+  public FileService() {
+    this(new DuplicateDetector());
+  }
+
+  FileService(DuplicateDetector duplicateDetector) {
+    this.duplicateDetector = duplicateDetector;
+  }
+
   private final ConcurrentHashMap<Path, EditLock> editLocks = new ConcurrentHashMap<>();
 
   /** A per-file lock together with the number of threads currently holding or awaiting it. */
@@ -127,13 +142,13 @@ public class FileService {
    *     If-Match} value was supplied
    * @throws IllegalArgumentException if the upload would exceed the storage quota
    */
-  public void uploadFile(
+  public UploadResultDto uploadFile(
       String rootPath, String relativeFolderPath, MultipartFile file, Long quotaMb)
       throws IOException {
-    uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
+    return uploadFile(rootPath, relativeFolderPath, file, quotaMb, null);
   }
 
-  public void uploadFile(
+  public UploadResultDto uploadFile(
       String rootPath,
       String relativeFolderPath,
       MultipartFile file,
@@ -164,6 +179,7 @@ public class FileService {
     Path target = folder.resolve(fileName).normalize();
     FileUtils.validatePath(rootPath, target);
 
+    var digest = ChecksumUtils.newDigest(CHECKSUM_ALGORITHM);
     withEditLock(
         target,
         () -> {
@@ -173,13 +189,31 @@ public class FileService {
                 "\"" + fileName + "\" already exists in this folder");
           }
           checkIfMatch(target, expectedETag);
+
           if (Files.isRegularFile(target)) {
             validateReplacementWithinQuota(rootPath, Files.size(target), file.getSize(), quotaMb);
           } else {
             FileUtils.validateStorageSizeWithinQuota(rootPath, file.getSize(), quotaMb);
           }
-          Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+          try (InputStream input = new DigestInputStream(file.getInputStream(), digest)) {
+            Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+          }
         });
+
+    List<DuplicateFileDto> duplicates;
+    try {
+      duplicates =
+          duplicateDetector.findDuplicates(
+              Paths.get(rootPath),
+              target,
+              HexFormat.of().formatHex(digest.digest()),
+              file.getSize());
+    } catch (IOException | UncheckedIOException | InvalidPathException exception) {
+      // The write succeeded. Advisory duplicate hints must never turn it into a failed upload.
+      duplicates = List.of();
+    }
+    return new UploadResultDto(!duplicates.isEmpty(), duplicates);
   }
 
   public void moveFile(String rootPath, String relativeSourcePath, String relativeDestinationPath)
@@ -229,29 +263,13 @@ public class FileService {
       throw new InvalidPathException("Path traversal attempt detected: " + relativeFilePath);
     }
 
-    try {
-      MessageDigest digest = MessageDigest.getInstance(CHECKSUM_ALGORITHM);
-      byte[] buffer = new byte[8192];
-      try (InputStream in = Files.newInputStream(realFile)) {
-        int read;
-        while ((read = in.read(buffer)) != -1) {
-          digest.update(buffer, 0, read);
-        }
-      }
-      return toHex(digest.digest());
-    } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is mandated by the Java platform, so this should never happen.
-      throw new IllegalStateException("SHA-256 algorithm not available", e);
+    try (InputStream in = Files.newInputStream(realFile)) {
+      return calculateChecksum(in);
     }
   }
 
-  private static String toHex(byte[] bytes) {
-    StringBuilder sb = new StringBuilder(bytes.length * 2);
-    for (byte b : bytes) {
-      sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-      sb.append(Character.forDigit(b & 0xF, 16));
-    }
-    return sb.toString();
+  private String calculateChecksum(InputStream inputStream) throws IOException {
+    return ChecksumUtils.calculateChecksum(inputStream, CHECKSUM_ALGORITHM);
   }
 
   /**

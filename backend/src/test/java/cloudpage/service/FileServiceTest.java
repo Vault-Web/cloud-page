@@ -3,6 +3,7 @@ package cloudpage.service;
 import static org.junit.jupiter.api.Assertions.*;
 
 import cloudpage.dto.FileResource;
+import cloudpage.dto.UploadResultDto;
 import cloudpage.exceptions.FileNotFoundException;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceAlreadyExistsException;
@@ -40,6 +41,127 @@ class FileServiceTest {
     Path uploaded = tempDir.resolve("docs/hello.txt");
     assertTrue(Files.exists(uploaded));
     assertEquals("Hello World", Files.readString(uploaded));
+  }
+
+  @Test
+  void uploadFile_duplicateContent_returnsDuplicateInfo() throws IOException {
+    Files.createDirectory(tempDir.resolve("docs"));
+    Files.writeString(tempDir.resolve("docs/original.txt"), "same content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "copy.txt", "text/plain", "same content".getBytes());
+
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null);
+
+    assertTrue(result.isDuplicate());
+    assertEquals(1, result.getDuplicates().size());
+    assertEquals("original.txt", result.getDuplicates().get(0).getFileName());
+    assertEquals("docs/original.txt", result.getDuplicates().get(0).getFilePath());
+
+    assertTrue(Files.exists(tempDir.resolve("docs/copy.txt")));
+  }
+
+  @Test
+  void uploadFile_uniqueContent_returnsNoDuplicateInfo() throws IOException {
+    Files.createDirectory(tempDir.resolve("docs"));
+    Files.writeString(tempDir.resolve("docs/original.txt"), "original content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "unique.txt", "text/plain", "unique content".getBytes());
+
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null);
+
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+
+    assertTrue(Files.exists(tempDir.resolve("docs/unique.txt")));
+  }
+
+  @Test
+  void uploadFile_emptyFile_isNotReportedAsDuplicate() throws IOException {
+    Path docs = tempDir.resolve("docs");
+    Files.createDirectories(docs);
+    Files.write(docs.resolve("existing.txt"), new byte[0]);
+
+    MockMultipartFile upload = new MockMultipartFile("file", "copy.txt", "text/plain", new byte[0]);
+
+    UploadResultDto result = fileService.uploadFile(tempDir.toString(), "docs", upload, null);
+
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+    assertTrue(Files.exists(docs.resolve("copy.txt")));
+  }
+
+  @Test
+  void uploadFile_duplicateInAnotherFolder_returnsDuplicateInfo() throws IOException {
+    Files.createDirectory(tempDir.resolve("docs"));
+    Files.createDirectory(tempDir.resolve("archive"));
+
+    Files.writeString(tempDir.resolve("archive/original.txt"), "same content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "copy.txt", "text/plain", "same content".getBytes());
+
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null);
+
+    assertTrue(result.isDuplicate());
+    assertEquals(1, result.getDuplicates().size());
+    assertEquals("original.txt", result.getDuplicates().get(0).getFileName());
+    assertEquals("archive/original.txt", result.getDuplicates().get(0).getFilePath());
+  }
+
+  @Test
+  void uploadFile_duplicateOutsideUserRoot_isNotReturned() throws IOException {
+    Path userRoot = tempDir.resolve("user1");
+    Path otherUserRoot = tempDir.resolve("user2");
+
+    Files.createDirectories(userRoot.resolve("docs"));
+    Files.createDirectories(otherUserRoot.resolve("docs"));
+
+    Files.writeString(otherUserRoot.resolve("docs/original.txt"), "same content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "copy.txt", "text/plain", "same content".getBytes());
+
+    var result = fileService.uploadFile(userRoot.toString(), "docs", file, null);
+
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+
+    assertTrue(Files.exists(userRoot.resolve("docs/copy.txt")));
+  }
+
+  @Test
+  void uploadFile_multipleDuplicates_returnsAllDuplicateInfo() throws IOException {
+    Files.createDirectory(tempDir.resolve("docs"));
+    Files.createDirectory(tempDir.resolve("archive"));
+
+    Files.writeString(tempDir.resolve("docs/original1.txt"), "same content");
+    Files.writeString(tempDir.resolve("archive/original2.txt"), "same content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "copy.txt", "text/plain", "same content".getBytes());
+
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null);
+
+    assertTrue(result.isDuplicate());
+    assertEquals(2, result.getDuplicates().size());
+  }
+
+  @Test
+  void uploadFile_replacingSameFile_doesNotReportItAsDuplicate() throws IOException {
+    Files.createDirectory(tempDir.resolve("docs"));
+    Files.writeString(tempDir.resolve("docs/report.txt"), "same content");
+
+    MockMultipartFile file =
+        new MockMultipartFile("file", "report.txt", "text/plain", "same content".getBytes());
+
+    var result = fileService.uploadFile(tempDir.toString(), "docs", file, null, "*");
+
+    assertFalse(result.isDuplicate());
+    assertTrue(result.getDuplicates().isEmpty());
+
+    assertEquals("same content", Files.readString(tempDir.resolve("docs/report.txt")));
   }
 
   @Test

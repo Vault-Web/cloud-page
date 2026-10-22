@@ -9,6 +9,7 @@ import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -32,6 +33,23 @@ import org.springframework.stereotype.Service;
 public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
+  private final DuplicateDetector duplicateDetector;
+
+  public FolderService() {
+    this(new DuplicateDetector());
+  }
+
+  FolderService(DuplicateDetector duplicateDetector) {
+    this.duplicateDetector = duplicateDetector;
+  }
+
+  private void markDuplicatesForPage(Path rootReal, Path folder, List<FolderContentItemDto> items) {
+    try {
+      duplicateDetector.markDuplicates(rootReal, folder, items);
+    } catch (IOException | UncheckedIOException | InvalidPathException exception) {
+      // Duplicate flags are advisory: an unreadable scan must not break a valid listing.
+    }
+  }
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
       Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
@@ -296,6 +314,19 @@ public class FolderService {
       String sort,
       boolean includeDirectorySizes)
       throws IOException {
+    return getFolderContentPage(
+        rootPath, relativePath, page, size, sort, includeDirectorySizes, false);
+  }
+
+  public PageResponseDto<FolderContentItemDto> getFolderContentPage(
+      String rootPath,
+      String relativePath,
+      int page,
+      int size,
+      String sort,
+      boolean includeDirectorySizes,
+      boolean includeDuplicates)
+      throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -402,6 +433,9 @@ public class FolderService {
     List<FolderContentItemDto> pageContent =
         fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
+    if (includeDuplicates) {
+      markDuplicatesForPage(rootReal, folder, pageContent);
+    }
     resolveDeferredAttributes(folder, pageContent, includeDirectorySizes || eagerSizes);
 
     return new PageResponseDto<>(pageContent, totalElements, totalPages, page);

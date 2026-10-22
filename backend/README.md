@@ -268,3 +268,42 @@ Then visit:
 
 ---
 
+# Duplicate-content hints
+
+`POST /api/files/upload` returns an additive JSON response after a successful save:
+
+```json
+{
+  "duplicate": true,
+  "duplicates": [
+    { "fileName": "original.txt", "filePath": "archive/original.txt" }
+  ]
+}
+```
+
+Matches are based on SHA-256 and limited to the authenticated owner's storage root.
+Empty files, the uploaded path itself, trash and symbolic links are excluded. Content
+matches do not reject an upload. Duplicate-content hints are separate from the
+duplicate-filename protection introduced by PR #186.
+
+Folder badges can be requested with
+`GET /api/folders/content?page=0&size=50&includeDuplicates=true`. The flag defaults
+to `false`, so existing listing requests do not traverse the storage tree or hash
+file contents for duplicate detection. The existing `duplicate` response property
+is an advisory match flag; a false value is not proof of uniqueness, especially
+when detection was not requested or some files could not be read.
+
+The upload's checksum is calculated while copying its incoming bytes, inside the
+existing edit lock after precondition and quota validation. Detection runs only
+after a successful save and cannot turn that save into a failed response.
+
+Detection is best-effort and synchronous when requested: it walks file metadata
+within the root and hashes only nonempty same-size candidates. Listing scans
+are limited to size groups represented on the requested page, skip unique-size
+groups, and hash each candidate at most once per request. There are no persistent
+checksum or directory-index caches, so mutations are reflected on the next scan
+and deleted/moved files do not leave unbounded server-side cache entries.
+
+Deploy this PR independently first. The frontend integration for upload warnings
+and optional badges is separate. Before enabling the stricter name-conflict
+behavior in backend PR #186, deploy the editor changes in Vault-Web/vault-web #400.
