@@ -20,14 +20,17 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
@@ -310,8 +313,25 @@ public class FolderService {
               .filter(path -> !path.normalize().equals(trashDir))
               .map(
                   path -> {
+                    Path pathReal;
                     try {
-                      Path pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
+                      pathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
+                    } catch (InvalidPathException e) {
+                      // An entry whose real path escapes the user's root (for example a
+                      // symlink to a file outside the root) must not fail the whole
+                      // listing. The entry is hidden instead; the traversal check
+                      // itself is unchanged, so the outside target stays inaccessible.
+                      log.warn(
+                          "Skipping entry that resolves outside the user root while listing"
+                              + " {}: {}",
+                          folder,
+                          path);
+                      return null;
+                    } catch (IOException e) {
+                      throw new InvalidPathException(
+                          "Invalid path detected while listing: " + path + " - " + e.getMessage());
+                    }
+                    try {
                       String itemRelativePath = toRelativePath(rootReal, pathReal);
 
                       boolean isDirectory = Files.isDirectory(path);
@@ -325,9 +345,18 @@ public class FolderService {
                         Path originalFile = path.resolveSibling(originalFileName);
 
                         if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
-                          Path originalFileReal =
-                              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
-                          originalPath = toRelativePath(rootReal, originalFileReal);
+                          try {
+                            Path originalFileReal =
+                                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                            originalPath = toRelativePath(rootReal, originalFileReal);
+                          } catch (InvalidPathException e) {
+                            // Never expose an original that resolves outside the user's
+                            // root; report the conflict file without an original path.
+                            log.warn(
+                                "Not exposing original of conflict file {}: {}",
+                                path,
+                                e.getMessage());
+                          }
                         }
                       }
                       long sizeValue = 0L;
@@ -368,6 +397,7 @@ public class FolderService {
                           "Invalid path detected while listing: " + path + " - " + e.getMessage());
                     }
                   })
+              .filter(Objects::nonNull)
               .collect(Collectors.toList());
     }
 
@@ -507,24 +537,33 @@ public class FolderService {
           .filter(childPath -> !childPath.normalize().equals(trashDir))
           .forEach(
               childPath -> {
+                Path childPathReal;
                 try {
                   // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal =
-                      FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
-
-                  if (Files.isDirectory(childPath)) {
-                    subfolders.add(
-                        toFolderListItemDto(
-                            rootReal, childPath, childPathReal, includeChildCounts));
-                  } else if (Files.isRegularFile(childPath)) {
-                    files.add(toFileDto(rootReal, childPath, childPathReal));
-                  }
+                  childPathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
+                } catch (InvalidPathException e) {
+                  // An entry whose real path escapes the user's root (for example a
+                  // symlink to a file outside the root) must not fail the whole
+                  // listing. The entry is hidden instead; the traversal check
+                  // itself is unchanged, so the outside target stays inaccessible.
+                  log.warn(
+                      "Skipping entry that resolves outside the user root while reading {}: {}",
+                      path,
+                      childPath);
+                  return;
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while reading folder: "
                           + childPath
                           + " - "
                           + e.getMessage());
+                }
+
+                if (Files.isDirectory(childPath)) {
+                  subfolders.add(
+                      toFolderListItemDto(rootReal, childPath, childPathReal, includeChildCounts));
+                } else if (Files.isRegularFile(childPath)) {
+                  files.add(toFileDto(rootReal, childPath, childPathReal));
                 }
               });
     }
@@ -576,9 +615,15 @@ public class FolderService {
         Path originalFile = filePath.resolveSibling(originalFileName);
 
         if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
-          Path originalFileReal =
-              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
-          originalPath = toRelativePath(rootReal, originalFileReal);
+          try {
+            Path originalFileReal =
+                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+            originalPath = toRelativePath(rootReal, originalFileReal);
+          } catch (InvalidPathException e) {
+            // Never expose an original that resolves outside the user's root; report
+            // the conflict file without an original path.
+            log.warn("Not exposing original of conflict file {}: {}", filePath, e.getMessage());
+          }
         }
       }
 
@@ -605,6 +650,10 @@ public class FolderService {
               childPath -> {
                 try {
                   FileUtils.validatePath(rootReal, childPath);
+                } catch (InvalidPathException e) {
+                  // Entries that resolve outside the user's root are hidden from
+                  // listings, so they are not counted either.
+                  return false;
                 } catch (IOException e) {
                   throw new InvalidPathException(
                       "Invalid path detected while counting: "
