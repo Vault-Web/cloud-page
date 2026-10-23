@@ -26,10 +26,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class FolderService {
 
   private static final long DEFERRED_SIZE = -1L;
@@ -84,6 +86,7 @@ public class FolderService {
     try {
       return FileUtils.validateAndResolvePathWithinRoot(rootReal, childPath);
     } catch (InvalidPathException exception) {
+      log.warn("Skipping entry that resolves outside the user root: {}", childPath);
       return null;
     }
   }
@@ -375,9 +378,18 @@ public class FolderService {
                         Path originalFile = path.resolveSibling(originalFileName);
 
                         if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
-                          Path originalFileReal =
-                              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
-                          originalPath = toRelativePath(rootReal, originalFileReal);
+                          try {
+                            Path originalFileReal =
+                                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                            originalPath = toRelativePath(rootReal, originalFileReal);
+                          } catch (InvalidPathException exception) {
+                            // The original may change after the NOFOLLOW_LINKS check.
+                            // Keep the conflict visible without exposing an unsafe original.
+                            log.warn(
+                                "Not exposing original of conflict file {}: {}",
+                                path,
+                                originalFile);
+                          }
                         }
                       }
                       long sizeValue = 0L;
@@ -632,9 +644,14 @@ public class FolderService {
         Path originalFile = filePath.resolveSibling(originalFileName);
 
         if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
-          Path originalFileReal =
-              FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
-          originalPath = toRelativePath(rootReal, originalFileReal);
+          try {
+            Path originalFileReal =
+                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+            originalPath = toRelativePath(rootReal, originalFileReal);
+          } catch (InvalidPathException exception) {
+            // Keep the listing usable if the original changes after its type check.
+            log.warn("Not exposing original of conflict file {}: {}", filePath, originalFile);
+          }
         }
       }
 

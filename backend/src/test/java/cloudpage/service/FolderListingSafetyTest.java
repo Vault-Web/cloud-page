@@ -2,9 +2,12 @@ package cloudpage.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
 
 import cloudpage.dto.FolderDto;
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -108,6 +111,48 @@ class FolderListingSafetyTest {
     assertThrows(
         InvalidPathException.class,
         () -> service.getFolderContentPage(root.toString(), "external", 0, 10, "name,asc"));
+  }
+
+  @Test
+  void shallowListingKeepsConflictWhenOriginalFailsContainmentValidation() throws IOException {
+    assertRejectedConflictOriginalDoesNotBreakListing(false);
+  }
+
+  @Test
+  void paginatedListingKeepsConflictWhenOriginalFailsContainmentValidation() throws IOException {
+    assertRejectedConflictOriginalDoesNotBreakListing(true);
+  }
+
+  private void assertRejectedConflictOriginalDoesNotBreakListing(boolean paginated)
+      throws IOException {
+    Path original = Files.writeString(root.resolve("a.md"), "original");
+    String conflictName = "a.sync-conflict-20261010-142530-DEV.md";
+    Files.writeString(root.resolve(conflictName), "conflict");
+    Path rootReal = root.toRealPath().normalize();
+
+    // Deterministically model containment validation rejecting the original
+    // after the NOFOLLOW_LINKS type check, without racing filesystem threads.
+    try (var paths = mockStatic(FileUtils.class, CALLS_REAL_METHODS)) {
+      paths
+          .when(() -> FileUtils.validateAndResolvePathWithinRoot(rootReal, original))
+          .thenThrow(new InvalidPathException("Original now resolves outside root"));
+
+      if (paginated) {
+        var page = service.getFolderContentPage(root.toString(), "", 0, 10, "name,asc");
+        assertEquals(1, page.getTotalElements());
+        var conflict = page.getContent().getFirst();
+        assertEquals(conflictName, conflict.getName());
+        assertTrue(conflict.isConflict());
+        assertNull(conflict.getOriginalPath());
+      } else {
+        var tree = service.getFolderTree(root.toString());
+        assertEquals(1, tree.getFiles().size());
+        var conflict = tree.getFiles().getFirst();
+        assertEquals(conflictName, conflict.getName());
+        assertTrue(conflict.isConflict());
+        assertNull(conflict.getOriginalPath());
+      }
+    }
   }
 
   private static void link(Path link, Path target) throws IOException {
