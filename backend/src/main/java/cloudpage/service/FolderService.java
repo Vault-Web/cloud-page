@@ -288,6 +288,7 @@ public class FolderService {
           .forEach(
               p -> {
                 try {
+
                   Files.delete(p);
                 } catch (IOException e) {
                   throw new FileDeletionException(
