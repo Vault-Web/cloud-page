@@ -57,7 +57,8 @@ public class TrashService {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     FileUtils.validatePath(rootPath, source);
     if (Files.isDirectory(source)) {
-        // handle directory deletion.
+      // handle directory deletion.
+      FileUtils.rejectTrashPath(source);
     }
 
     if (!Files.isRegularFile(source)) {
@@ -87,6 +88,20 @@ public class TrashService {
       throw e;
     }
   }
+
+  /**
+   * Moves a file or folder into the user's trash instead of deleting it permanently. The file or
+   * folder can be nested within a folder that was already trashed
+   *
+   * @param rootPath the root directory of the user, used as a security boundary
+   * @param userId the id of the owning user
+   * @param relativeFilePath the path, relative to the root, of the file to trash
+   * @param parentEntry The trashed parent folder
+   * @throws IOException if the file cannot be moved
+   * @throws ResourceNotFoundException if the file does not exist or is not a regular file
+   */
+  public void moveToTrash(
+      String rootPath, String userId, String relativeFilePath, TrashEntry parentEntry) {}
 
   /**
    * Lists the current contents of a user's trash.

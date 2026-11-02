@@ -1,9 +1,8 @@
 package cloudpage.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -20,15 +19,27 @@ public class TrashEntry {
 
   @Id private String id;
 
+  @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, orphanRemoval = true)
+  public Set<TrashEntry> children;
+
+  @ManyToOne
+  @JoinColumn(name = "parent_id")
+  TrashEntry parent;
+
   private String userId;
 
   /** Path, relative to the user's root, the file was deleted from and should be restored to. */
   private String originalPath;
 
-  /** Original file name, shown in the trash listing. */
+  /** Original file or folder name, shown in the trash listing. */
   private String displayName;
 
   private Instant deletedAt;
 
   private long sizeBytes;
+
+  public void addChild(TrashEntry child) {
+    children.add(child);
+    child.setParent(this);
+  }
 }
