@@ -57,7 +57,7 @@ public class TrashService {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     FileUtils.validatePath(rootPath, source);
     if (Files.isDirectory(source)) {
-        // handle directory deletion.
+      // handle directory deletion.
     }
 
     if (!Files.isRegularFile(source)) {
