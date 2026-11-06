@@ -90,6 +90,12 @@ public class SecureSendController {
     return ResponseEntity.noContent().build();
   }
 
+  @PostMapping("/secure-sends/{id}/reactivate")
+  public ResponseEntity<Void> reactivate(@PathVariable String id) {
+    secureSendService.reactivate(userService.getCurrentUser().getId(), id);
+    return ResponseEntity.noContent().build();
+  }
+
   @DeleteMapping("/secure-sends/{id}/permanent")
   public ResponseEntity<Void> delete(@PathVariable String id) {
     secureSendService.delete(userService.getCurrentUser().getId(), id);

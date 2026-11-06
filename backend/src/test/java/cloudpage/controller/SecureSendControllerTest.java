@@ -136,6 +136,13 @@ class SecureSendControllerTest {
   }
 
   @Test
+  void reactivateUsesCurrentOwnerAndReturnsNoContent() throws Exception {
+    mockMvc.perform(post("/api/secure-sends/send-1/reactivate")).andExpect(status().isNoContent());
+
+    verify(secureSendService).reactivate("owner-1", "send-1");
+  }
+
+  @Test
   void publicDownloadReturnsResourceHeaders() throws Exception {
     Path file = Files.writeString(tempDir.resolve("report.txt"), "report");
     FileResource fileResource = new FileResource(new UrlResource(file.toUri()), "\"6-123\"", 123L);
