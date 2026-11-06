@@ -40,7 +40,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-/** Creates, lists, revokes, and resolves expiring external links to files and folders. */
+/** Creates, lists, revokes, reactivates, and resolves external links to files and folders. */
 @Service
 public class SecureSendService {
 
@@ -158,6 +158,22 @@ public class SecureSendService {
       send.setRevokedAt(clock.instant());
       secureSendRepository.save(send);
     }
+  }
+
+  /** Restores an unexpired owner's link without changing its token or other settings. */
+  public void reactivate(String ownerId, String id) {
+    SecureSend send =
+        secureSendRepository
+            .findByIdAndOwnerId(id, ownerId)
+            .orElseThrow(() -> new ResourceNotFoundException("SecureSend", "id", id));
+    if (send.getRevokedAt() == null) {
+      throw new IllegalArgumentException("Link is not revoked");
+    }
+    if (send.getExpiresAt() != null && !send.getExpiresAt().isAfter(clock.instant())) {
+      throw new IllegalArgumentException("Expired links cannot be reactivated");
+    }
+    send.setRevokedAt(null);
+    secureSendRepository.save(send);
   }
 
   public void delete(String ownerId, String id) {

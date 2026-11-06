@@ -142,6 +142,73 @@ class SecureSendServiceTest {
   }
 
   @Test
+  void reactivationRestoresTheSamePasswordProtectedLinkWithoutChangingItsSettings()
+      throws Exception {
+    Path target = Files.writeString(tempDir.resolve("report.pdf"), "report");
+    CreatedSecureSend created = service.create(owner, "report.pdf", null, "secret");
+    SecureSend send = created.secureSend();
+    String tokenHash = send.getTokenHash();
+    String passwordHash = send.getPasswordHash();
+    send.setLastAccessedAt(NOW.minusSeconds(60));
+    when(secureSendRepository.findByIdAndOwnerId(send.getId(), "owner-1"))
+        .thenReturn(Optional.of(send));
+    when(secureSendRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(send));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+
+    service.revoke("owner-1", send.getId());
+    assertThrows(
+        SecureSendUnavailableException.class, () -> service.resolve(created.token(), "secret", ""));
+
+    clearInvocations(secureSendRepository);
+    service.reactivate("owner-1", send.getId());
+
+    verify(secureSendRepository).save(send);
+    assertNull(send.getRevokedAt());
+    assertEquals(tokenHash, send.getTokenHash());
+    assertEquals(passwordHash, send.getPasswordHash());
+    assertNull(send.getExpiresAt());
+    assertEquals("report.pdf", send.getRelativeFilePath());
+    assertEquals(NOW.minusSeconds(60), send.getLastAccessedAt());
+    assertThrows(
+        InvalidSecureSendPasswordException.class,
+        () -> service.resolve(created.token(), "wrong", ""));
+    assertEquals(target.toRealPath(), service.resolve(created.token(), "secret", "").getPath());
+  }
+
+  @Test
+  void reactivationRejectsExpiredLinksWithoutChangingRevocation() {
+    SecureSend send = new SecureSend();
+    send.setId("expired");
+    send.setRevokedAt(NOW.minusSeconds(60));
+    send.setExpiresAt(NOW);
+    when(secureSendRepository.findByIdAndOwnerId("expired", "owner-1"))
+        .thenReturn(Optional.of(send));
+
+    assertThrows(IllegalArgumentException.class, () -> service.reactivate("owner-1", "expired"));
+
+    assertNotNull(send.getRevokedAt());
+    verify(secureSendRepository, never()).save(send);
+  }
+
+  @Test
+  void reactivationRejectsDeletedAndOtherOwnersLinks() {
+    assertThrows(ResourceNotFoundException.class, () -> service.reactivate("owner-1", "missing"));
+    verify(secureSendRepository).findByIdAndOwnerId("missing", "owner-1");
+    verify(secureSendRepository, never()).save(any());
+  }
+
+  @Test
+  void reactivationRejectsAnAlreadyActiveLink() {
+    SecureSend send = new SecureSend();
+    send.setId("active");
+    when(secureSendRepository.findByIdAndOwnerId("active", "owner-1"))
+        .thenReturn(Optional.of(send));
+
+    assertThrows(IllegalArgumentException.class, () -> service.reactivate("owner-1", "active"));
+    verify(secureSendRepository, never()).save(send);
+  }
+
+  @Test
   void folderLinkListsItsContentsAndNavigatesIntoSubfolders() throws Exception {
     Path project = Files.createDirectory(tempDir.resolve("project"));
     Files.writeString(project.resolve("readme.md"), "readme");
