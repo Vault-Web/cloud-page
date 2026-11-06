@@ -56,6 +56,10 @@ public class TrashService {
       throws IOException {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     FileUtils.validatePath(rootPath, source);
+    if (Files.isDirectory(source)) {
+      // handle directory deletion.
+    }
+
     if (!Files.isRegularFile(source)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
     }
