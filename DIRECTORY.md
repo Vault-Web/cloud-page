@@ -22,6 +22,7 @@
           - 📄 [CreateResourceShareRequest.java](backend/src/main/java/cloudpage/dto/CreateResourceShareRequest.java)
           - 📄 [CreateSecureSendRequest.java](backend/src/main/java/cloudpage/dto/CreateSecureSendRequest.java)
           - 📄 [CreatedSecureSend.java](backend/src/main/java/cloudpage/dto/CreatedSecureSend.java)
+          - 📄 [DuplicateFileDto.java](backend/src/main/java/cloudpage/dto/DuplicateFileDto.java)
           - 📄 [FileDto.java](backend/src/main/java/cloudpage/dto/FileDto.java)
           - 📄 [FileResource.java](backend/src/main/java/cloudpage/dto/FileResource.java)
           - 📄 [FileScanResultDto.java](backend/src/main/java/cloudpage/dto/FileScanResultDto.java)
@@ -39,6 +40,7 @@
           - 📄 [SharedFileResource.java](backend/src/main/java/cloudpage/dto/SharedFileResource.java)
           - 📄 [SharedFolderResource.java](backend/src/main/java/cloudpage/dto/SharedFolderResource.java)
           - 📄 [TrashEntryDto.java](backend/src/main/java/cloudpage/dto/TrashEntryDto.java)
+          - 📄 [UploadResultDto.java](backend/src/main/java/cloudpage/dto/UploadResultDto.java)
         - 📁 **exceptions**
           - 📄 [FileAccessException.java](backend/src/main/java/cloudpage/exceptions/FileAccessException.java)
           - 📄 [FileDeletionException.java](backend/src/main/java/cloudpage/exceptions/FileDeletionException.java)
@@ -46,6 +48,7 @@
           - 📄 [GlobalExceptionHandler.java](backend/src/main/java/cloudpage/exceptions/GlobalExceptionHandler.java)
           - 📄 [InvalidPathException.java](backend/src/main/java/cloudpage/exceptions/InvalidPathException.java)
           - 📄 [InvalidSecureSendPasswordException.java](backend/src/main/java/cloudpage/exceptions/InvalidSecureSendPasswordException.java)
+          - 📄 [ResourceAlreadyExistsException.java](backend/src/main/java/cloudpage/exceptions/ResourceAlreadyExistsException.java)
           - 📄 [ResourceConflictException.java](backend/src/main/java/cloudpage/exceptions/ResourceConflictException.java)
           - 📄 [ResourceNotFoundException.java](backend/src/main/java/cloudpage/exceptions/ResourceNotFoundException.java)
           - 📄 [SecureSendUnavailableException.java](backend/src/main/java/cloudpage/exceptions/SecureSendUnavailableException.java)
@@ -86,6 +89,7 @@
           - 📄 [PublicPaths.java](backend/src/main/java/cloudpage/security/PublicPaths.java)
           - 📄 [SecurityConfig.java](backend/src/main/java/cloudpage/security/SecurityConfig.java)
         - 📁 **service**
+          - 📄 [DuplicateDetector.java](backend/src/main/java/cloudpage/service/DuplicateDetector.java)
           - 📄 [FileService.java](backend/src/main/java/cloudpage/service/FileService.java)
           - 📄 [FolderService.java](backend/src/main/java/cloudpage/service/FolderService.java)
           - 📄 [ResourceShareService.java](backend/src/main/java/cloudpage/service/ResourceShareService.java)
@@ -93,6 +97,7 @@
           - 📄 [TrashService.java](backend/src/main/java/cloudpage/service/TrashService.java)
           - 📄 [UserService.java](backend/src/main/java/cloudpage/service/UserService.java)
         - 📁 **util**
+          - 📄 [ChecksumUtils.java](backend/src/main/java/cloudpage/util/ChecksumUtils.java)
           - 📄 [FileUtils.java](backend/src/main/java/cloudpage/util/FileUtils.java)
   - 📁 **test**
     - 📁 **java**
@@ -100,6 +105,7 @@
         - 📄 [ApplicationTests.java](backend/src/test/java/cloudpage/ApplicationTests.java)
         - 📁 **controller**
           - 📄 [FileControllerTest.java](backend/src/test/java/cloudpage/controller/FileControllerTest.java)
+          - 📄 [FileSaveHttpContractTest.java](backend/src/test/java/cloudpage/controller/FileSaveHttpContractTest.java)
           - 📄 [FolderControllerTest.java](backend/src/test/java/cloudpage/controller/FolderControllerTest.java)
           - 📄 [SecureSendControllerPublicBaseUrlTest.java](backend/src/test/java/cloudpage/controller/SecureSendControllerPublicBaseUrlTest.java)
           - 📄 [SecureSendControllerTest.java](backend/src/test/java/cloudpage/controller/SecureSendControllerTest.java)
@@ -113,7 +119,9 @@
           - 📄 [ClamAvVirusScannerTest.java](backend/src/test/java/cloudpage/scan/ClamAvVirusScannerTest.java)
           - 📄 [VirusScanServiceTest.java](backend/src/test/java/cloudpage/scan/VirusScanServiceTest.java)
         - 📁 **service**
+          - 📄 [DuplicateDetectionReliabilityTest.java](backend/src/test/java/cloudpage/service/DuplicateDetectionReliabilityTest.java)
           - 📄 [FileServiceTest.java](backend/src/test/java/cloudpage/service/FileServiceTest.java)
+          - 📄 [FolderListingSafetyTest.java](backend/src/test/java/cloudpage/service/FolderListingSafetyTest.java)
           - 📄 [FolderServiceTest.java](backend/src/test/java/cloudpage/service/FolderServiceTest.java)
           - 📄 [ResourceShareServiceTest.java](backend/src/test/java/cloudpage/service/ResourceShareServiceTest.java)
           - 📄 [SecureSendServiceTest.java](backend/src/test/java/cloudpage/service/SecureSendServiceTest.java)
