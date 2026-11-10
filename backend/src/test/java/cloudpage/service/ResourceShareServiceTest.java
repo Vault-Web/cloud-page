@@ -20,6 +20,8 @@ import cloudpage.model.User;
 import cloudpage.repository.ResourceShareRepository;
 import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FailingInputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -186,6 +188,30 @@ class ResourceShareServiceTest {
                 "../private.txt",
                 new MockMultipartFile("file", "blocked".getBytes())));
     assertEquals("private", Files.readString(ownerRoot.resolve("private.txt")));
+  }
+
+  @Test
+  void editInterruptedMidWrite_keepsOriginalFile() throws Exception {
+    Path target = Files.writeString(ownerRoot.resolve("notes.txt"), "before");
+    ResourceShare share = share("share-1", "notes.txt", SharedResourceType.FILE);
+    share.setPermissions(Set.of(SharePermission.EDIT));
+    when(shareRepository.findByIdAndRecipientIdAndRevokedAtIsNull("share-1", "recipient-1"))
+        .thenReturn(Optional.of(share));
+    MockMultipartFile interrupted =
+        new MockMultipartFile("file", "notes.txt", "text/plain", "replacement".getBytes()) {
+          @Override
+          public InputStream getInputStream() {
+            return new FailingInputStream("repl");
+          }
+        };
+
+    assertThrows(
+        java.io.IOException.class, () -> service.editFile("share-1", recipient, "", interrupted));
+
+    assertEquals("before", Files.readString(target));
+    try (var entries = Files.list(ownerRoot)) {
+      assertEquals(1, entries.count(), "an interrupted edit must not leave a temporary file");
+    }
   }
 
   @Test

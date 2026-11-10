@@ -2,10 +2,17 @@ package cloudpage.util;
 
 import cloudpage.exceptions.InvalidPathException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /** Contains utility functions for handling and processing files */
@@ -97,6 +104,59 @@ public final class FileUtils {
     validatePath(rootPath, source);
     validatePath(rootPath, target);
     Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+  }
+
+  /**
+   * Writes {@code content} to {@code target} so that the target is never left half-written. The
+   * bytes go to a temporary file in the same directory first, and only once that file is complete
+   * does it replace the target, with a single atomic move. If reading {@code content} or writing
+   * fails part-way, the target keeps its previous content (or still does not exist) and the
+   * temporary file is removed.
+   *
+   * <p>The caller is responsible for validating {@code target} and for serialising concurrent
+   * writers to it. If the target already exists as a regular file, its POSIX permissions are
+   * carried over to the replacement. The temporary file is created next to the target so the move
+   * never crosses a filesystem boundary.
+   *
+   * @param target the file to create or replace; its parent directory must exist
+   * @param content the new content; not closed by this method
+   * @throws IOException if the content cannot be read or the file cannot be written
+   */
+  public static void replaceAtomically(Path target, InputStream content) throws IOException {
+    Path directory = target.toAbsolutePath().getParent();
+    // A fixed-length name, so a long target file name cannot push the temporary name past the
+    // filesystem's limit. createFile (unlike createTempFile) keeps the default permissions.
+    Path temp = Files.createFile(directory.resolve(".cloudpage-" + UUID.randomUUID() + ".tmp"));
+    try {
+      Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING);
+      copyPermissions(target, temp);
+      try {
+        Files.move(
+            temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      } catch (AtomicMoveNotSupportedException e) {
+        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+      }
+    } catch (IOException | RuntimeException e) {
+      try {
+        Files.deleteIfExists(temp);
+      } catch (IOException suppressed) {
+        e.addSuppressed(suppressed);
+      }
+      throw e;
+    }
+  }
+
+  private static void copyPermissions(Path from, Path to) throws IOException {
+    if (!Files.isRegularFile(from, LinkOption.NOFOLLOW_LINKS)) {
+      return;
+    }
+    PosixFileAttributeView view = Files.getFileAttributeView(to, PosixFileAttributeView.class);
+    if (view == null) {
+      return;
+    }
+    Set<PosixFilePermission> permissions =
+        Files.getPosixFilePermissions(from, LinkOption.NOFOLLOW_LINKS);
+    view.setPermissions(permissions);
   }
 
   /**

@@ -17,7 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.DigestInputStream;
 import java.util.HexFormat;
@@ -217,7 +216,7 @@ public class FileService {
               includeDuplicateHints
                   ? new DigestInputStream(file.getInputStream(), digest)
                   : file.getInputStream()) {
-            Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+            FileUtils.replaceAtomically(target, input);
           }
         });
 
