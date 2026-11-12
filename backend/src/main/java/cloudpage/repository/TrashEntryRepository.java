@@ -15,4 +15,6 @@ public interface TrashEntryRepository extends JpaRepository<TrashEntry, String> 
   Optional<TrashEntry> findByIdAndUserId(String id, String userId);
 
   List<TrashEntry> findByDeletedAtBefore(Instant cutoff);
+
+  List<TrashEntry> findByParent(String id);
 }
