@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RequestMapping("/api/folders")
 public class FolderController {
 
+  private static final int MAX_SEARCH_RESULTS = 100;
   private final FolderService folderService;
   private final UserService userService;
 
@@ -147,9 +148,15 @@ public class FolderController {
       return ResponseEntity.badRequest().build();
     }
     int validatedMinScore = Math.max(0, Math.min(100, minScore));
+    int validatedMaxResults = Math.min(maxResults, MAX_SEARCH_RESULTS);
     var user = userService.getCurrentUser();
     return ResponseEntity.ok(
         folderService.searchInFolder(
-            user.getRootFolderPath(), folderPath, query, maxResults, validatedMinScore, filter));
+            user.getRootFolderPath(),
+            folderPath,
+            query,
+            validatedMaxResults,
+            validatedMinScore,
+            filter));
   }
 }
