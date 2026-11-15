@@ -96,7 +96,8 @@ public final class FileUtils {
     Path target = Paths.get(rootPath, relativeDestinationPath).normalize();
     validatePath(rootPath, source);
     validatePath(rootPath, target);
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    StorageQuotaLock.withLock(
+        Paths.get(rootPath), () -> Files.move(source, target, StandardCopyOption.REPLACE_EXISTING));
   }
 
   /**

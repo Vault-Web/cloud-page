@@ -128,6 +128,98 @@ class StorageQuotaConcurrencyTest {
     verify(entries, never()).delete(entry);
   }
 
+  @Test
+  void fileMoveWaitsForQuotaWrite() throws Exception {
+    Files.write(root.resolve("before.bin"), new byte[1]);
+    assertMutationWaits(() -> files.moveFile(root.toString(), "before.bin", "after.bin"));
+    assertTrue(Files.exists(root.resolve("after.bin")));
+  }
+
+  @Test
+  void folderMoveWaitsForQuotaWrite() throws Exception {
+    Files.createDirectory(root.resolve("before"));
+    Files.write(root.resolve("before/content.bin"), new byte[1]);
+    assertMutationWaits(() -> new FolderService().moveFolder(root.toString(), "before", "after"));
+    assertTrue(Files.exists(root.resolve("after/content.bin")));
+  }
+
+  @Test
+  void failedTrashSaveCannotCompensateOverConcurrentUpload() throws Exception {
+    Files.write(root.resolve("original.bin"), new byte[UPLOAD_BYTES]);
+    TrashEntryRepository entries = mock(TrashEntryRepository.class);
+    TrashService trash = new TrashService(entries, mock(UserRepository.class));
+    CountDownLatch saving = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch started = new CountDownLatch(1);
+    when(entries.save(any()))
+        .thenAnswer(
+            invocation -> {
+              saving.countDown();
+              assertTrue(release.await(5, TimeUnit.SECONDS));
+              throw new IllegalStateException("Synthetic repository failure");
+            });
+    try (var executor = Executors.newFixedThreadPool(2)) {
+      var deleting =
+          executor.submit(
+              () -> {
+                trash.moveToTrash(root.toString(), "owner", "original.bin");
+                return null;
+              });
+      try {
+        assertTrue(saving.await(5, TimeUnit.SECONDS));
+        var uploading =
+            executor.submit(
+                () -> {
+                  started.countDown();
+                  return files.uploadFile(root.toString(), "", upload("new.bin"), 1L);
+                });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        assertThrows(TimeoutException.class, () -> uploading.get(300, TimeUnit.MILLISECONDS));
+        release.countDown();
+        assertInstanceOf(
+            IllegalStateException.class,
+            assertThrows(ExecutionException.class, () -> deleting.get(5, TimeUnit.SECONDS))
+                .getCause());
+        assertInstanceOf(
+            IllegalArgumentException.class,
+            assertThrows(ExecutionException.class, () -> uploading.get(5, TimeUnit.SECONDS))
+                .getCause());
+        assertEquals(UPLOAD_BYTES, Files.size(root.resolve("original.bin")));
+        assertFalse(Files.exists(root.resolve("new.bin")));
+      } finally {
+        release.countDown();
+      }
+    }
+  }
+
+  private void assertMutationWaits(Write mutation) throws Exception {
+    CountDownLatch writing = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch started = new CountDownLatch(1);
+    try (var executor = Executors.newFixedThreadPool(2)) {
+      var first =
+          executor.submit(
+              () -> files.uploadFile(root.toString(), "", pausedUpload(writing, release), 1L));
+      try {
+        assertTrue(writing.await(5, TimeUnit.SECONDS));
+        var second =
+            executor.submit(
+                () -> {
+                  started.countDown();
+                  mutation.run();
+                  return null;
+                });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        assertThrows(TimeoutException.class, () -> second.get(300, TimeUnit.MILLISECONDS));
+        release.countDown();
+        first.get(5, TimeUnit.SECONDS);
+        second.get(5, TimeUnit.SECONDS);
+      } finally {
+        release.countDown();
+      }
+    }
+  }
+
   private void assertSerializedQuota(Write competing) throws Exception {
     long initialSize = FileUtils.calculateDirectorySize(root);
     CountDownLatch writing = new CountDownLatch(1);

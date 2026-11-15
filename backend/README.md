@@ -46,6 +46,8 @@ Direct uploads, shared-folder uploads, shared edits and trash restores serialize
 check and write using the same real-root lock. Different users' roots remain independent;
 root symlink aliases share one lock. Trash remains excluded from active usage, and replacements
 count only their size difference. Locks include pending writers and are removed after use.
+File/folder moves and trash moves (including database-failure compensation) also hold that lock
+so usage measurement cannot miss relocated bytes or race with a compensating restore.
 
 This protects the current single-instance Cloud deployment only. External filesystem writers
 (including synchronization tools) and additional Cloud instances do not participate; multiple

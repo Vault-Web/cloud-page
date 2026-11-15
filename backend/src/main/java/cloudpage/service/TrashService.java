@@ -55,6 +55,12 @@ public class TrashService {
    */
   public void moveToTrash(String rootPath, String userId, String relativeFilePath)
       throws IOException {
+    StorageQuotaLock.withLock(
+        Paths.get(rootPath), () -> moveToTrashLocked(rootPath, userId, relativeFilePath));
+  }
+
+  private void moveToTrashLocked(String rootPath, String userId, String relativeFilePath)
+      throws IOException {
     Path source = Paths.get(rootPath, relativeFilePath).normalize();
     FileUtils.validatePath(rootPath, source);
     if (!Files.isRegularFile(source)) {
