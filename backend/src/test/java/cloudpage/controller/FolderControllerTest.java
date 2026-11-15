@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import cloudpage.dto.FolderContentItemDto;
 import cloudpage.dto.FolderDto;
 import cloudpage.dto.PageResponseDto;
+import cloudpage.dto.SearchFilter;
+import cloudpage.dto.SearchResult;
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.model.User;
 import cloudpage.ratelimit.RateLimitFilter;
@@ -16,8 +18,6 @@ import cloudpage.security.JwtAuthFilter;
 import cloudpage.security.JwtUtil;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
-import cloudpage.dto.SearchFilter;
-import cloudpage.dto.SearchResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -485,68 +485,68 @@ class FolderControllerTest {
   @Test
   void searchInFolder_validRequest_returnsResults() throws Exception {
     List<SearchResult> results =
-            Collections.singletonList(
-                    new SearchResult("report.pdf", "docs/report.pdf", "file", 100L,
-                            "application/pdf", FIXED_TIME, 95));
+        Collections.singletonList(
+            new SearchResult(
+                "report.pdf", "docs/report.pdf", "file", 100L, "application/pdf", FIXED_TIME, 95));
     when(folderService.searchInFolder(
             eq(tempDir.toString()), eq("/"), eq("report"), eq(20), eq(60), any(SearchFilter.class)))
-            .thenReturn(results);
+        .thenReturn(results);
 
     mockMvc
-            .perform(get("/api/folders/search").param("folderPath", "/").param("query", "report"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].name").value("report.pdf"))
-            .andExpect(jsonPath("$[0].path").value("docs/report.pdf"))
-            .andExpect(jsonPath("$[0].type").value("file"))
-            .andExpect(jsonPath("$[0].score").value(95));
+        .perform(get("/api/folders/search").param("folderPath", "/").param("query", "report"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].name").value("report.pdf"))
+        .andExpect(jsonPath("$[0].path").value("docs/report.pdf"))
+        .andExpect(jsonPath("$[0].type").value("file"))
+        .andExpect(jsonPath("$[0].score").value(95));
   }
 
   @Test
   void searchInFolder_maxResultsAboveCap_isClampedToCap() throws Exception {
     when(folderService.searchInFolder(any(), any(), any(), anyInt(), anyInt(), any()))
-            .thenReturn(Collections.emptyList());
+        .thenReturn(Collections.emptyList());
 
     mockMvc
-            .perform(
-                    get("/api/folders/search")
-                            .param("folderPath", "/")
-                            .param("query", "abc")
-                            .param("maxResults", "100000"))
-            .andExpect(status().isOk());
+        .perform(
+            get("/api/folders/search")
+                .param("folderPath", "/")
+                .param("query", "abc")
+                .param("maxResults", "100000"))
+        .andExpect(status().isOk());
 
     verify(folderService)
-            .searchInFolder(
-                    eq(tempDir.toString()), eq("/"), eq("abc"), eq(100), eq(60), any(SearchFilter.class));
+        .searchInFolder(
+            eq(tempDir.toString()), eq("/"), eq("abc"), eq(100), eq(60), any(SearchFilter.class));
   }
 
   @Test
   void searchInFolder_maxResultsBelowCap_passesThrough() throws Exception {
     when(folderService.searchInFolder(any(), any(), any(), anyInt(), anyInt(), any()))
-            .thenReturn(Collections.emptyList());
+        .thenReturn(Collections.emptyList());
 
     mockMvc
-            .perform(
-                    get("/api/folders/search")
-                            .param("folderPath", "/")
-                            .param("query", "abc")
-                            .param("maxResults", "5"))
-            .andExpect(status().isOk());
+        .perform(
+            get("/api/folders/search")
+                .param("folderPath", "/")
+                .param("query", "abc")
+                .param("maxResults", "5"))
+        .andExpect(status().isOk());
 
     verify(folderService)
-            .searchInFolder(
-                    eq(tempDir.toString()), eq("/"), eq("abc"), eq(5), eq(60), any(SearchFilter.class));
+        .searchInFolder(
+            eq(tempDir.toString()), eq("/"), eq("abc"), eq(5), eq(60), any(SearchFilter.class));
   }
 
   @Test
   void searchInFolder_negativeMaxResults_returns400() throws Exception {
     mockMvc
-            .perform(
-                    get("/api/folders/search")
-                            .param("folderPath", "/")
-                            .param("query", "abc")
-                            .param("maxResults", "-1"))
-            .andExpect(status().isBadRequest());
+        .perform(
+            get("/api/folders/search")
+                .param("folderPath", "/")
+                .param("query", "abc")
+                .param("maxResults", "-1"))
+        .andExpect(status().isBadRequest());
 
     verifyNoInteractions(folderService);
   }
@@ -554,8 +554,8 @@ class FolderControllerTest {
   @Test
   void searchInFolder_blankQuery_returns400() throws Exception {
     mockMvc
-            .perform(get("/api/folders/search").param("folderPath", "/").param("query", "   "))
-            .andExpect(status().isBadRequest());
+        .perform(get("/api/folders/search").param("folderPath", "/").param("query", "   "))
+        .andExpect(status().isBadRequest());
 
     verifyNoInteractions(folderService);
   }
@@ -563,47 +563,51 @@ class FolderControllerTest {
   @Test
   void searchInFolder_minScoreOutOfRange_isClamped() throws Exception {
     when(folderService.searchInFolder(any(), any(), any(), anyInt(), anyInt(), any()))
-            .thenReturn(Collections.emptyList());
+        .thenReturn(Collections.emptyList());
 
     mockMvc
-            .perform(
-                    get("/api/folders/search")
-                            .param("folderPath", "/")
-                            .param("query", "abc")
-                            .param("minScore", "500"))
-            .andExpect(status().isOk());
+        .perform(
+            get("/api/folders/search")
+                .param("folderPath", "/")
+                .param("query", "abc")
+                .param("minScore", "500"))
+        .andExpect(status().isOk());
     verify(folderService)
-            .searchInFolder(
-                    eq(tempDir.toString()), eq("/"), eq("abc"), eq(20), eq(100), any(SearchFilter.class));
+        .searchInFolder(
+            eq(tempDir.toString()), eq("/"), eq("abc"), eq(20), eq(100), any(SearchFilter.class));
 
     mockMvc
-            .perform(
-                    get("/api/folders/search")
-                            .param("folderPath", "/")
-                            .param("query", "abc")
-                            .param("minScore", "-5"))
-            .andExpect(status().isOk());
+        .perform(
+            get("/api/folders/search")
+                .param("folderPath", "/")
+                .param("query", "abc")
+                .param("minScore", "-5"))
+        .andExpect(status().isOk());
     verify(folderService)
-            .searchInFolder(
-                    eq(tempDir.toString()), eq("/"), eq("abc"), eq(20), eq(0), any(SearchFilter.class));
+        .searchInFolder(
+            eq(tempDir.toString()), eq("/"), eq("abc"), eq(20), eq(0), any(SearchFilter.class));
   }
 
   @Test
   void searchInFolder_invalidFolderPath_returns400() throws Exception {
     when(folderService.searchInFolder(
-            eq(tempDir.toString()), eq("../../evil"), eq("abc"), eq(20), eq(60),
+            eq(tempDir.toString()),
+            eq("../../evil"),
+            eq("abc"),
+            eq(20),
+            eq(60),
             any(SearchFilter.class)))
-            .thenThrow(new InvalidPathException("Path traversal attempt detected"));
+        .thenThrow(new InvalidPathException("Path traversal attempt detected"));
 
     mockMvc
-            .perform(get("/api/folders/search").param("folderPath", "../../evil").param("query", "abc"))
-            .andExpect(status().isBadRequest());
+        .perform(get("/api/folders/search").param("folderPath", "../../evil").param("query", "abc"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
   void searchInFolder_missingQuery_returns400() throws Exception {
     mockMvc
-            .perform(get("/api/folders/search").param("folderPath", "/"))
-            .andExpect(status().isBadRequest());
+        .perform(get("/api/folders/search").param("folderPath", "/"))
+        .andExpect(status().isBadRequest());
   }
 }

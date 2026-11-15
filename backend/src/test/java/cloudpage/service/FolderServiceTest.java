@@ -1188,7 +1188,7 @@ class FolderServiceTest {
     Files.writeString(tempDir.resolve("report-live.txt"), "x");
 
     List<SearchResult> results =
-            folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
 
     assertEquals(1, results.size());
     assertEquals("report-live.txt", results.get(0).getName());
@@ -1197,8 +1197,8 @@ class FolderServiceTest {
   @Test
   void searchInFolder_pathTraversal_throwsInvalidPathException() {
     assertThrows(
-            InvalidPathException.class,
-            () -> folderService.searchInFolder(tempDir.toString(), "../../etc", "report", 20, 0));
+        InvalidPathException.class,
+        () -> folderService.searchInFolder(tempDir.toString(), "../../etc", "report", 20, 0));
   }
 
   @Test
@@ -1207,7 +1207,7 @@ class FolderServiceTest {
     Files.writeString(tempDir.resolve("zzzzzzzz.bin"), "x");
 
     List<SearchResult> results =
-            folderService.searchInFolder(tempDir.toString(), "", "report", 20, 90);
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 90);
 
     assertEquals(1, results.size());
     assertEquals("report.txt", results.get(0).getName());
@@ -1220,7 +1220,7 @@ class FolderServiceTest {
     }
 
     List<SearchResult> results =
-            folderService.searchInFolder(tempDir.toString(), "", "report", 2, 0);
+        folderService.searchInFolder(tempDir.toString(), "", "report", 2, 0);
 
     assertEquals(2, results.size());
   }
@@ -1228,15 +1228,14 @@ class FolderServiceTest {
   @Test
   void searchInFolder_brokenSymlink_isSkippedAndOtherResultsStillReturned() throws IOException {
     try {
-      Files.createSymbolicLink(
-              tempDir.resolve("report-broken"), tempDir.resolve("does-not-exist"));
+      Files.createSymbolicLink(tempDir.resolve("report-broken"), tempDir.resolve("does-not-exist"));
     } catch (UnsupportedOperationException | IOException | SecurityException exception) {
       assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
     }
     Files.writeString(tempDir.resolve("report-ok.txt"), "x");
 
     List<SearchResult> results =
-            folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
 
     assertEquals(1, results.size());
     assertEquals("report-ok.txt", results.get(0).getName());
