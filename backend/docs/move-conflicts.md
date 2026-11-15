@@ -21,7 +21,10 @@ writers is introduced.
   existing rename-before-save regression covers a 409 response without uploading
   or closing the editor; its move flow reports individual failures.
 - Review and deploy this service version using the normal operator-controlled
-  process. No deployment pointers are changed by this fix.
+  process. No deployment pointers are changed by this fix. Before production
+  adoption, identify the deployed portal revision and verify its 409 handling;
+  update incompatible clients first, then the Cloud service. Compatibility checks
+  against the current portal source do not establish the deployed revision.
 - Code rollback requires no data conversion, but restores destructive replacement
   behavior. It cannot recover data overwritten by older versions. Keep normal
   filesystem backups and restore lost data from backups when necessary.
