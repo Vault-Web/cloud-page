@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -54,9 +55,12 @@ public class FolderService {
   }
 
   private static final Pattern SYNCTHING_CONFLICT_PATTERN =
-      Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
+          Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
 
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  /** A path that matched the search query by name, before any file metadata has been read. */
+  private record Candidate(Path path, int score) {}
 
   private boolean isSyncthingConflict(String fileName) {
     return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
@@ -106,19 +110,19 @@ public class FolderService {
    * @throws IOException if an error occurs while walking the file tree
    */
   public List<SearchResult> searchInFolder(
-      String rootPath, String folderPath, String query, int maxResults, int minScore)
-      throws IOException {
+          String rootPath, String folderPath, String query, int maxResults, int minScore)
+          throws IOException {
     return searchInFolder(rootPath, folderPath, query, maxResults, minScore, null);
   }
 
   public List<SearchResult> searchInFolder(
-      String rootPath,
-      String folderPath,
-      String query,
-      int maxResults,
-      int minScore,
-      SearchFilter filter)
-      throws IOException {
+          String rootPath,
+          String folderPath,
+          String query,
+          int maxResults,
+          int minScore,
+          SearchFilter filter)
+          throws IOException {
 
     Path rootAbsolute = Paths.get(rootPath).toAbsolutePath().normalize();
     Path folder = Paths.get(rootPath, folderPath).normalize();
@@ -135,28 +139,30 @@ public class FolderService {
     Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.walk(folder)) {
       return stream
-          .filter(p -> !p.equals(folder))
-          .filter(p -> !p.startsWith(trashDir))
-          .map(p -> createSearchResult(p, lowerQuery, rootAbsolute))
-          .filter(r -> r.getScore() >= minScore)
-          .filter(r -> matchesFilter(r, effectiveFilter))
-          .sorted(searchComparator(effectiveFilter))
-          .limit(maxResults)
-          .collect(Collectors.toList());
+              .filter(p -> !p.equals(folder))
+              .filter(p -> !p.startsWith(trashDir))
+              .map(p -> new Candidate(p, scoreName(p, lowerQuery)))
+              .filter(c -> c.score() >= minScore)
+              .map(c -> buildSearchResult(c, rootAbsolute))
+              .flatMap(Optional::stream)
+              .filter(r -> matchesFilter(r, effectiveFilter))
+              .sorted(searchComparator(effectiveFilter))
+              .limit(maxResults)
+              .collect(Collectors.toList());
     }
   }
 
   /** Returns whether a search result satisfies every set metadata filter. */
   private boolean matchesFilter(SearchResult result, SearchFilter filter) {
     if (filter.getType() != null
-        && !filter.getType().isBlank()
-        && !filter.getType().equalsIgnoreCase(result.getType())) {
+            && !filter.getType().isBlank()
+            && !filter.getType().equalsIgnoreCase(result.getType())) {
       return false;
     }
     if (filter.getMimeType() != null && !filter.getMimeType().isBlank()) {
       String mimeType = result.getMimeType();
       if (mimeType == null
-          || !mimeType
+              || !mimeType
               .toLowerCase(Locale.ROOT)
               .startsWith(filter.getMimeType().toLowerCase(Locale.ROOT))) {
         return false;
@@ -171,17 +177,17 @@ public class FolderService {
     }
     Long modified = result.getLastModifiedAt();
     if (filter.getModifiedAfter() != null
-        && (modified == null || modified <= filter.getModifiedAfter())) {
+            && (modified == null || modified <= filter.getModifiedAfter())) {
       return false;
     }
     return filter.getModifiedBefore() == null
-        || (modified != null && modified < filter.getModifiedBefore());
+            || (modified != null && modified < filter.getModifiedBefore());
   }
 
   /** Builds the result comparator for the requested sort field and direction. */
   private Comparator<SearchResult> searchComparator(SearchFilter filter) {
     String sortBy =
-        filter.getSortBy() == null ? "relevance" : filter.getSortBy().toLowerCase(Locale.ROOT);
+            filter.getSortBy() == null ? "relevance" : filter.getSortBy().toLowerCase(Locale.ROOT);
     Comparator<SearchResult> comparator;
     switch (sortBy) {
       case "name":
@@ -189,12 +195,12 @@ public class FolderService {
         break;
       case "size":
         comparator =
-            Comparator.comparing((SearchResult r) -> r.getSize() == null ? -1L : r.getSize());
+                Comparator.comparing((SearchResult r) -> r.getSize() == null ? -1L : r.getSize());
         break;
       case "lastmodified":
         comparator =
-            Comparator.comparing(
-                (SearchResult r) -> r.getLastModifiedAt() == null ? -1L : r.getLastModifiedAt());
+                Comparator.comparing(
+                        (SearchResult r) -> r.getLastModifiedAt() == null ? -1L : r.getLastModifiedAt());
         break;
       default:
         comparator = Comparator.comparingInt(SearchResult::getScore);
@@ -203,19 +209,17 @@ public class FolderService {
   }
 
   /**
-   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query. The
-   * score is calculated using the Jaro-Winkler algorithm. If the file name contains the query as a
-   * substring, the score is boosted to at least 95.
+   * Calculates the similarity of a file or folder name to the query. The score is calculated using
+   * the Jaro-Winkler algorithm. If the name contains the query as a substring, the score is boosted
+   * to at least 95. Only the name is inspected, so this performs no file system access.
    *
    * @param path the path of the file or folder to evaluate
    * @param query the search term in lowercase
-   * @return a {@link SearchResult} with the calculated similarity score
-   * @throws FileNotFoundException if the file or folder metadata cannot be read
+   * @return the similarity score between 0 and 100
    */
-  private SearchResult createSearchResult(Path path, String query, Path rootAbsolute) {
-    String name = path.getFileName().toString();
+  private int scoreName(Path path, String query) {
     // Locale.ROOT prevents using the system's local language for case conversion
-    String lowerName = name.toLowerCase(Locale.ROOT);
+    String lowerName = path.getFileName().toString().toLowerCase(Locale.ROOT);
 
     // Jaro-Winkler Score
     int score = (int) (jaroWinkler.apply(lowerName, query) * 100);
@@ -224,21 +228,36 @@ public class FolderService {
     if (lowerName.contains(query)) {
       score = Math.max(score, 95);
     }
+    return score;
+  }
 
+  /**
+   * Reads the metadata of a matching candidate and builds its {@link SearchResult}. Entries whose
+   * metadata cannot be read (for example dangling links or files removed during the walk) are
+   * skipped, so one unreadable entry does not fail the whole search.
+   *
+   * @param candidate the matching path and its precomputed score
+   * @param rootAbsolute the user's absolute root, used to build the root-relative result path
+   * @return the result, or empty if the entry must be skipped
+   */
+  private Optional<SearchResult> buildSearchResult(Candidate candidate, Path rootAbsolute) {
+    Path path = candidate.path();
     try {
       Path lexicalPath = path.toAbsolutePath().normalize();
       String relativePath = toRelativePath(rootAbsolute, lexicalPath);
       boolean isDir = Files.isDirectory(path);
-      return new SearchResult(
-          name,
-          relativePath,
-          isDir ? "folder" : "file",
-          isDir ? null : Files.size(path),
-          isDir ? null : Files.probeContentType(path),
-          Files.getLastModifiedTime(path).toMillis(),
-          score);
-    } catch (IOException e) {
-      throw new FileNotFoundException("Could not read file or folder: " + path);
+      return Optional.of(
+              new SearchResult(
+                      path.getFileName().toString(),
+                      relativePath,
+                      isDir ? "folder" : "file",
+                      isDir ? null : Files.size(path),
+                      isDir ? null : Files.probeContentType(path),
+                      Files.getLastModifiedTime(path).toMillis(),
+                      candidate.score()));
+    } catch (IOException | UncheckedIOException e) {
+      log.debug("Skipping unreadable search result: {}", e.getMessage());
+      return Optional.empty();
     }
   }
 
@@ -257,14 +276,14 @@ public class FolderService {
   }
 
   public FolderDto getFolderTree(String rootPath, String relativePath, boolean includeChildCounts)
-      throws IOException {
+          throws IOException {
     Path folder = Paths.get(rootPath, relativePath).normalize();
     FileUtils.validatePath(rootPath, folder);
     return readFolderShallow(rootPath, folder, includeChildCounts);
   }
 
   public Path createFolder(String rootPath, String relativeParentPath, String name)
-      throws IOException {
+          throws IOException {
     FileUtils.rejectTrashPath(Paths.get(relativeParentPath).resolve(name).normalize());
     Path parent = Paths.get(rootPath, relativeParentPath).normalize();
     FileUtils.validatePath(rootPath, parent);
@@ -284,52 +303,52 @@ public class FolderService {
 
     try (var stream = Files.walk(folder)) {
       stream
-          .sorted((a, b) -> b.compareTo(a))
-          .forEach(
-              p -> {
-                try {
-                  Files.delete(p);
-                } catch (IOException e) {
-                  throw new FileDeletionException(
-                      "Failed to delete: " + p + "with exception : " + e.getMessage());
-                }
-              });
+              .sorted((a, b) -> b.compareTo(a))
+              .forEach(
+                      p -> {
+                        try {
+                          Files.delete(p);
+                        } catch (IOException e) {
+                          throw new FileDeletionException(
+                                  "Failed to delete: " + p + "with exception : " + e.getMessage());
+                        }
+                      });
     }
   }
 
   public void moveFolder(String rootPath, String relativeSourcePath, String relativeDestinationPath)
-      throws IOException {
+          throws IOException {
     FileUtils.rejectTrashPath(Paths.get(relativeSourcePath).normalize());
     FileUtils.rejectTrashPath(Paths.get(relativeDestinationPath).normalize());
     FileUtils.move(rootPath, relativeSourcePath, relativeDestinationPath);
   }
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
-      String rootPath, String relativePath, int page, int size, String sort) throws IOException {
+          String rootPath, String relativePath, int page, int size, String sort) throws IOException {
     return getFolderContentPage(rootPath, relativePath, page, size, sort, true);
   }
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
-      String rootPath,
-      String relativePath,
-      int page,
-      int size,
-      String sort,
-      boolean includeDirectorySizes)
-      throws IOException {
+          String rootPath,
+          String relativePath,
+          int page,
+          int size,
+          String sort,
+          boolean includeDirectorySizes)
+          throws IOException {
     return getFolderContentPage(
-        rootPath, relativePath, page, size, sort, includeDirectorySizes, false);
+            rootPath, relativePath, page, size, sort, includeDirectorySizes, false);
   }
 
   public PageResponseDto<FolderContentItemDto> getFolderContentPage(
-      String rootPath,
-      String relativePath,
-      int page,
-      int size,
-      String sort,
-      boolean includeDirectorySizes,
-      boolean includeDuplicates)
-      throws IOException {
+          String rootPath,
+          String relativePath,
+          int page,
+          int size,
+          String sort,
+          boolean includeDirectorySizes,
+          boolean includeDuplicates)
+          throws IOException {
     if (page < 0) {
       throw new IllegalArgumentException("page must be greater than or equal to 0");
     }
@@ -338,9 +357,9 @@ public class FolderService {
     }
 
     Path folder =
-        (relativePath == null || relativePath.isBlank())
-            ? Paths.get(rootPath)
-            : Paths.get(rootPath, relativePath).normalize();
+            (relativePath == null || relativePath.isBlank())
+                    ? Paths.get(rootPath)
+                    : Paths.get(rootPath, relativePath).normalize();
 
     FileUtils.validatePath(rootPath, folder);
     if (!Files.exists(folder) || !Files.isDirectory(folder)) {
@@ -356,82 +375,82 @@ public class FolderService {
     try (var stream = Files.list(folder)) {
       Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
       items =
-          stream
-              .filter(path -> !path.normalize().equals(trashDir))
-              .map(
-                  path -> {
-                    try {
-                      Path pathReal = resolveListedChild(rootReal, path);
-                      if (pathReal == null) {
-                        return null;
-                      }
-                      String itemRelativePath = toRelativePath(rootReal, pathReal);
+              stream
+                      .filter(path -> !path.normalize().equals(trashDir))
+                      .map(
+                              path -> {
+                                try {
+                                  Path pathReal = resolveListedChild(rootReal, path);
+                                  if (pathReal == null) {
+                                    return null;
+                                  }
+                                  String itemRelativePath = toRelativePath(rootReal, pathReal);
 
-                      boolean isDirectory = Files.isDirectory(path);
-                      String fileName = path.getFileName().toString();
-                      boolean conflict = !isDirectory && isSyncthingConflict(fileName);
+                                  boolean isDirectory = Files.isDirectory(path);
+                                  String fileName = path.getFileName().toString();
+                                  boolean conflict = !isDirectory && isSyncthingConflict(fileName);
 
-                      String originalPath = null;
+                                  String originalPath = null;
 
-                      if (conflict) {
-                        String originalFileName = inferOriginalFileName(fileName);
-                        Path originalFile = path.resolveSibling(originalFileName);
+                                  if (conflict) {
+                                    String originalFileName = inferOriginalFileName(fileName);
+                                    Path originalFile = path.resolveSibling(originalFileName);
 
-                        if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
-                          try {
-                            Path originalFileReal =
-                                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
-                            originalPath = toRelativePath(rootReal, originalFileReal);
-                          } catch (InvalidPathException exception) {
-                            // The original may change after the NOFOLLOW_LINKS check.
-                            // Keep the conflict visible without exposing an unsafe original.
-                            log.warn(
-                                "Not exposing original of conflict file {}: {}",
-                                path,
-                                originalFile);
-                          }
-                        }
-                      }
-                      long sizeValue = 0L;
-                      long lastModifiedAt;
+                                    if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
+                                      try {
+                                        Path originalFileReal =
+                                                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                                        originalPath = toRelativePath(rootReal, originalFileReal);
+                                      } catch (InvalidPathException exception) {
+                                        // The original may change after the NOFOLLOW_LINKS check.
+                                        // Keep the conflict visible without exposing an unsafe original.
+                                        log.warn(
+                                                "Not exposing original of conflict file {}: {}",
+                                                path,
+                                                originalFile);
+                                      }
+                                    }
+                                  }
+                                  long sizeValue = 0L;
+                                  long lastModifiedAt;
 
-                      try {
-                        BasicFileAttributes attrs =
-                            Files.readAttributes(path, BasicFileAttributes.class);
+                                  try {
+                                    BasicFileAttributes attrs =
+                                            Files.readAttributes(path, BasicFileAttributes.class);
 
-                        lastModifiedAt = attrs.lastModifiedTime().toMillis();
+                                    lastModifiedAt = attrs.lastModifiedTime().toMillis();
 
-                        if (!isDirectory) {
-                          sizeValue = attrs.size();
-                        } else if (eagerSizes) {
-                          sizeValue = calculateDirectorySize(path);
-                        } else {
-                          sizeValue = DEFERRED_SIZE;
-                        }
-                      } catch (IOException e) {
-                        throw new FileAccessException(
-                            "Failed to read file attributes: "
-                                + path
-                                + " with exception: "
-                                + e.getMessage());
-                      }
+                                    if (!isDirectory) {
+                                      sizeValue = attrs.size();
+                                    } else if (eagerSizes) {
+                                      sizeValue = calculateDirectorySize(path);
+                                    } else {
+                                      sizeValue = DEFERRED_SIZE;
+                                    }
+                                  } catch (IOException e) {
+                                    throw new FileAccessException(
+                                            "Failed to read file attributes: "
+                                                    + path
+                                                    + " with exception: "
+                                                    + e.getMessage());
+                                  }
 
-                      return new FolderContentItemDto(
-                          fileName,
-                          itemRelativePath,
-                          isDirectory,
-                          sizeValue,
-                          null,
-                          lastModifiedAt,
-                          conflict,
-                          originalPath);
-                    } catch (IOException e) {
-                      throw new InvalidPathException(
-                          "Invalid path detected while listing: " + path + " - " + e.getMessage());
-                    }
-                  })
-              .filter(Objects::nonNull)
-              .collect(Collectors.toList());
+                                  return new FolderContentItemDto(
+                                          fileName,
+                                          itemRelativePath,
+                                          isDirectory,
+                                          sizeValue,
+                                          null,
+                                          lastModifiedAt,
+                                          conflict,
+                                          originalPath);
+                                } catch (IOException e) {
+                                  throw new InvalidPathException(
+                                          "Invalid path detected while listing: " + path + " - " + e.getMessage());
+                                }
+                              })
+                      .filter(Objects::nonNull)
+                      .collect(Collectors.toList());
     }
 
     applySorting(items, sort);
@@ -443,7 +462,7 @@ public class FolderService {
     int toIndex = Math.min(fromIndex + size, items.size());
 
     List<FolderContentItemDto> pageContent =
-        fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
+            fromIndex >= items.size() ? List.of() : items.subList(fromIndex, toIndex);
 
     if (includeDuplicates) {
       markDuplicatesForPage(rootReal, folder, pageContent);
@@ -455,9 +474,9 @@ public class FolderService {
 
   public long getDirectorySize(String rootPath, String relativePath) throws IOException {
     Path folder =
-        (relativePath == null || relativePath.isBlank())
-            ? Paths.get(rootPath)
-            : Paths.get(rootPath, relativePath).normalize();
+            (relativePath == null || relativePath.isBlank())
+                    ? Paths.get(rootPath)
+                    : Paths.get(rootPath, relativePath).normalize();
 
     FileUtils.validatePath(rootPath, folder);
     if (!Files.exists(folder) || !Files.isDirectory(folder)) {
@@ -468,8 +487,8 @@ public class FolderService {
   }
 
   private void resolveDeferredAttributes(
-      Path folder, List<FolderContentItemDto> items, boolean resolveDirectorySizes)
-      throws IOException {
+          Path folder, List<FolderContentItemDto> items, boolean resolveDirectorySizes)
+          throws IOException {
     for (FolderContentItemDto item : items) {
       Path path = folder.resolve(item.getName());
       if (item.isDirectory()) {
@@ -501,18 +520,18 @@ public class FolderService {
   private long calculateDirectorySize(Path directory) {
     try (var stream = Files.walk(directory)) {
       return stream
-          .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-          .mapToLong(
-              file -> {
-                try {
-                  return Files.readAttributes(
-                          file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
-                      .size();
-                } catch (IOException e) {
-                  return 0L;
-                }
-              })
-          .sum();
+              .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+              .mapToLong(
+                      file -> {
+                        try {
+                          return Files.readAttributes(
+                                          file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
+                                  .size();
+                        } catch (IOException e) {
+                          return 0L;
+                        }
+                      })
+              .sum();
     } catch (IOException e) {
       throw new FileAccessException("Failed to calculate directory size: " + directory, e);
     }
@@ -543,7 +562,7 @@ public class FolderService {
       case "name":
       default:
         comparator =
-            Comparator.comparing(FolderContentItemDto::getName, String.CASE_INSENSITIVE_ORDER);
+                Comparator.comparing(FolderContentItemDto::getName, String.CASE_INSENSITIVE_ORDER);
         break;
     }
 
@@ -560,7 +579,7 @@ public class FolderService {
   }
 
   private FolderDto readFolderShallow(String rootPath, Path path, boolean includeChildCounts)
-      throws IOException {
+          throws IOException {
     // Resolve root path once for relative path calculation and path validation
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
     Path folderPathReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, path);
@@ -570,31 +589,31 @@ public class FolderService {
     Path trashDir = Paths.get(rootPath, FileUtils.TRASH_DIR).normalize();
     try (var stream = Files.list(path)) {
       stream
-          .filter(childPath -> !childPath.normalize().equals(trashDir))
-          .forEach(
-              childPath -> {
-                try {
-                  // Resolve and validate once per child to avoid repeated toRealPath() calls.
-                  Path childPathReal = resolveListedChild(rootReal, childPath);
-                  if (childPathReal == null) {
-                    return;
-                  }
+              .filter(childPath -> !childPath.normalize().equals(trashDir))
+              .forEach(
+                      childPath -> {
+                        try {
+                          // Resolve and validate once per child to avoid repeated toRealPath() calls.
+                          Path childPathReal = resolveListedChild(rootReal, childPath);
+                          if (childPathReal == null) {
+                            return;
+                          }
 
-                  if (Files.isDirectory(childPath)) {
-                    subfolders.add(
-                        toFolderListItemDto(
-                            rootReal, childPath, childPathReal, includeChildCounts));
-                  } else if (Files.isRegularFile(childPath)) {
-                    files.add(toFileDto(rootReal, childPath, childPathReal));
-                  }
-                } catch (IOException e) {
-                  throw new InvalidPathException(
-                      "Invalid path detected while reading folder: "
-                          + childPath
-                          + " - "
-                          + e.getMessage());
-                }
-              });
+                          if (Files.isDirectory(childPath)) {
+                            subfolders.add(
+                                    toFolderListItemDto(
+                                            rootReal, childPath, childPathReal, includeChildCounts));
+                          } else if (Files.isRegularFile(childPath)) {
+                            files.add(toFileDto(rootReal, childPath, childPathReal));
+                          }
+                        } catch (IOException e) {
+                          throw new InvalidPathException(
+                                  "Invalid path detected while reading folder: "
+                                          + childPath
+                                          + " - "
+                                          + e.getMessage());
+                        }
+                      });
     }
 
     // Calculate relative path for the current folder
@@ -603,31 +622,31 @@ public class FolderService {
     try {
       BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
       return new FolderDto(
-          path.getFileName().toString(),
-          folderRelativePath,
-          subfolders,
-          files,
-          folderAttrs.lastModifiedTime().toMillis());
+              path.getFileName().toString(),
+              folderRelativePath,
+              subfolders,
+              files,
+              folderAttrs.lastModifiedTime().toMillis());
     } catch (IOException e) {
       throw new FileAccessException(
-          "Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+              "Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
     }
   }
 
   private FolderListItemDto toFolderListItemDto(
-      Path rootReal, Path path, Path pathReal, boolean includeChildCounts) {
+          Path rootReal, Path path, Path pathReal, boolean includeChildCounts) {
     String folderRelativePath = toRelativePath(rootReal, pathReal);
 
     try {
       BasicFileAttributes folderAttrs = Files.readAttributes(path, BasicFileAttributes.class);
       return new FolderListItemDto(
-          path.getFileName().toString(),
-          folderRelativePath,
-          includeChildCounts ? countDirectChildren(rootReal, path) : -1L,
-          folderAttrs.lastModifiedTime().toMillis());
+              path.getFileName().toString(),
+              folderRelativePath,
+              includeChildCounts ? countDirectChildren(rootReal, path) : -1L,
+              folderAttrs.lastModifiedTime().toMillis());
     } catch (IOException e) {
       throw new FileAccessException(
-          "Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
+              "Failed to read folder attributes: " + path + " with exception: " + e.getMessage());
     }
   }
 
@@ -646,7 +665,7 @@ public class FolderService {
         if (Files.isRegularFile(originalFile, LinkOption.NOFOLLOW_LINKS)) {
           try {
             Path originalFileReal =
-                FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
+                    FileUtils.validateAndResolvePathWithinRoot(rootReal, originalFile);
             originalPath = toRelativePath(rootReal, originalFileReal);
           } catch (InvalidPathException exception) {
             // Keep the listing usable if the original changes after its type check.
@@ -657,45 +676,45 @@ public class FolderService {
 
       BasicFileAttributes attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
       return new FileDto(
-          fileName,
-          relativePath,
-          attrs.size(),
-          Files.probeContentType(filePath),
-          attrs.lastModifiedTime().toMillis(),
-          conflict,
-          originalPath);
+              fileName,
+              relativePath,
+              attrs.size(),
+              Files.probeContentType(filePath),
+              attrs.lastModifiedTime().toMillis(),
+              conflict,
+              originalPath);
 
     } catch (IOException e) {
       throw new FileAccessException(
-          "Failed to read file attributes: " + filePath + " with exception: " + e.getMessage());
+              "Failed to read file attributes: " + filePath + " with exception: " + e.getMessage());
     }
   }
 
   private long countDirectChildren(Path rootReal, Path directoryPath) {
     try (var stream = Files.list(directoryPath)) {
       return stream
-          .filter(
-              childPath -> {
-                try {
-                  if (resolveListedChild(rootReal, childPath) == null) {
-                    return false;
-                  }
-                } catch (IOException e) {
-                  throw new InvalidPathException(
-                      "Invalid path detected while counting: "
-                          + childPath
-                          + " - "
-                          + e.getMessage());
-                }
-                return Files.isDirectory(childPath) || Files.isRegularFile(childPath);
-              })
-          .count();
+              .filter(
+                      childPath -> {
+                        try {
+                          if (resolveListedChild(rootReal, childPath) == null) {
+                            return false;
+                          }
+                        } catch (IOException e) {
+                          throw new InvalidPathException(
+                                  "Invalid path detected while counting: "
+                                          + childPath
+                                          + " - "
+                                          + e.getMessage());
+                        }
+                        return Files.isDirectory(childPath) || Files.isRegularFile(childPath);
+                      })
+              .count();
     } catch (IOException e) {
       throw new FileAccessException(
-          "Failed to count direct children for: "
-              + directoryPath
-              + " with exception: "
-              + e.getMessage());
+              "Failed to count direct children for: "
+                      + directoryPath
+                      + " with exception: "
+                      + e.getMessage());
     }
   }
 
@@ -713,9 +732,9 @@ public class FolderService {
     Path relative;
     try {
       relative =
-          relativeFolderPath == null || relativeFolderPath.isBlank()
-              ? Path.of("")
-              : Path.of(relativeFolderPath);
+              relativeFolderPath == null || relativeFolderPath.isBlank()
+                      ? Path.of("")
+                      : Path.of(relativeFolderPath);
     } catch (java.nio.file.InvalidPathException exception) {
       throw new InvalidPathException("Invalid folder path: " + relativeFolderPath);
     }
@@ -731,8 +750,8 @@ public class FolderService {
     }
 
     Path folderReal =
-        FileUtils.validateAndResolvePathWithinRoot(
-            rootReal, rootReal.resolve(relative).normalize());
+            FileUtils.validateAndResolvePathWithinRoot(
+                    rootReal, rootReal.resolve(relative).normalize());
     if (!Files.isDirectory(folderReal)) {
       throw new InvalidPathException("Folder does not exist or is not a directory: " + relative);
     }
@@ -746,7 +765,7 @@ public class FolderService {
    * directory named {@code .trash} is excluded.
    */
   public void writeFolderArchive(String rootPath, Path folder, OutputStream output)
-      throws IOException {
+          throws IOException {
     Path rootReal = Paths.get(rootPath).toRealPath().normalize();
     Path folderReal = FileUtils.validateAndResolvePathWithinRoot(rootReal, folder);
     if (!Files.isDirectory(folderReal)) {
@@ -755,41 +774,41 @@ public class FolderService {
 
     try (ZipOutputStream zip = new ZipOutputStream(output)) {
       Files.walkFileTree(
-          folderReal,
-          new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
-                throws IOException {
-              if (!directory.equals(folderReal)
-                  && FileUtils.TRASH_DIR.equals(directory.getFileName().toString())) {
-                return FileVisitResult.SKIP_SUBTREE;
-              }
-              if (!directory.equals(folderReal)) {
-                zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, directory) + "/"));
-                zip.closeEntry();
-              }
-              return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                throws IOException {
-              if (attrs.isSymbolicLink() || !attrs.isRegularFile()) {
-                return FileVisitResult.CONTINUE;
-              }
-
-              try (InputStream input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
-                Path fileReal = file.toRealPath().normalize();
-                if (!fileReal.startsWith(rootReal)) {
-                  throw new InvalidPathException("Path traversal attempt detected: " + file);
+              folderReal,
+              new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
+                        throws IOException {
+                  if (!directory.equals(folderReal)
+                          && FileUtils.TRASH_DIR.equals(directory.getFileName().toString())) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                  }
+                  if (!directory.equals(folderReal)) {
+                    zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, directory) + "/"));
+                    zip.closeEntry();
+                  }
+                  return FileVisitResult.CONTINUE;
                 }
-                zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, file)));
-                input.transferTo(zip);
-                zip.closeEntry();
-              }
-              return FileVisitResult.CONTINUE;
-            }
-          });
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+                        throws IOException {
+                  if (attrs.isSymbolicLink() || !attrs.isRegularFile()) {
+                    return FileVisitResult.CONTINUE;
+                  }
+
+                  try (InputStream input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                    Path fileReal = file.toRealPath().normalize();
+                    if (!fileReal.startsWith(rootReal)) {
+                      throw new InvalidPathException("Path traversal attempt detected: " + file);
+                    }
+                    zip.putNextEntry(new ZipEntry(archiveEntryName(folderReal, file)));
+                    input.transferTo(zip);
+                    zip.closeEntry();
+                  }
+                  return FileVisitResult.CONTINUE;
+                }
+              });
       zip.finish();
     }
   }
