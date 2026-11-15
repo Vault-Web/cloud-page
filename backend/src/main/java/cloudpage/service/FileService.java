@@ -10,6 +10,7 @@ import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
 import cloudpage.util.ChecksumUtils;
 import cloudpage.util.FileUtils;
+import cloudpage.util.StorageQuotaLock;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -88,6 +89,11 @@ public class FileService {
 
   int activeEditLockCount() {
     return editLocks.size();
+  }
+
+  /** Always acquire the root quota lock before the file edit lock, including unlimited uploads. */
+  void withStorageWriteLock(Path root, Path target, EditAction action) throws IOException {
+    StorageQuotaLock.withLock(root, () -> withEditLock(target, action));
   }
 
   static Path editLockKey(Path target) throws IOException {
@@ -197,7 +203,8 @@ public class FileService {
     FileUtils.validatePath(rootPath, target);
 
     var digest = includeDuplicateHints ? ChecksumUtils.newDigest(CHECKSUM_ALGORITHM) : null;
-    withEditLock(
+    withStorageWriteLock(
+        Paths.get(rootPath),
         target,
         () -> {
           boolean exists = Files.exists(target, LinkOption.NOFOLLOW_LINKS);

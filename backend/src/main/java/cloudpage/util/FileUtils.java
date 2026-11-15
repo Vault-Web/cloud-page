@@ -134,6 +134,10 @@ public final class FileUtils {
   public static long calculateDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
 
+    // Files.walk does not traverse a symlink supplied as its starting directory.
+    // Measure the same real root used by the quota lock, including root aliases.
+    path = path.toRealPath();
+
     Path trashPath = path.resolve(TRASH_DIR);
     try (Stream<Path> paths = Files.walk(path)) {
       return paths

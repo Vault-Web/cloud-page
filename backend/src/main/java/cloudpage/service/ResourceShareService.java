@@ -240,7 +240,8 @@ public class ResourceShareService {
       throw new ResourceNotFoundException("Shared file", "path", childPath);
     }
 
-    fileService.withEditLock(
+    fileService.withStorageWriteLock(
+        resolved.ownerRoot(),
         resolved.target(),
         () -> {
           fileService.checkIfMatch(resolved.target(), expectedETag);

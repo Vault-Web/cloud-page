@@ -7,6 +7,7 @@ import cloudpage.model.User;
 import cloudpage.repository.TrashEntryRepository;
 import cloudpage.repository.UserRepository;
 import cloudpage.util.FileUtils;
+import cloudpage.util.StorageQuotaLock;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -126,15 +127,18 @@ public class TrashService {
 
     Path target = Paths.get(rootPath, entry.getOriginalPath()).normalize();
     FileUtils.validatePath(rootPath, target.getParent());
-    if (Files.exists(target)) {
-      throw new FileAlreadyExistsException(
-          "Cannot restore: a file already exists at " + entry.getOriginalPath());
-    }
-    FileUtils.validateStorageSizeWithinQuota(rootPath, entry.getSizeBytes(), quotaMb);
-    Files.createDirectories(target.getParent());
-    Files.move(trashed, target);
-
-    trashEntryRepository.delete(entry);
+    StorageQuotaLock.withLock(
+        Paths.get(rootPath),
+        () -> {
+          if (Files.exists(target)) {
+            throw new FileAlreadyExistsException(
+                "Cannot restore: a file already exists at " + entry.getOriginalPath());
+          }
+          FileUtils.validateStorageSizeWithinQuota(rootPath, entry.getSizeBytes(), quotaMb);
+          Files.createDirectories(target.getParent());
+          Files.move(trashed, target);
+          trashEntryRepository.delete(entry);
+        });
   }
 
   /**
