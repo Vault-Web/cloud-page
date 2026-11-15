@@ -241,6 +241,21 @@ class FolderServiceTest {
   // ── renameOrMoveFolder ───────────────────────────────────────────────────
 
   @Test
+  void moveFolder_occupiedDestination_preservesBothFolders() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path target = Files.createDirectory(tempDir.resolve("target"));
+    Files.writeString(source.resolve("data.txt"), "source bytes");
+    Files.writeString(target.resolve("data.txt"), "destination bytes");
+
+    assertThrows(
+        cloudpage.exceptions.ResourceAlreadyExistsException.class,
+        () -> folderService.moveFolder(tempDir.toString(), "source", "target"));
+
+    assertEquals("source bytes", Files.readString(source.resolve("data.txt")));
+    assertEquals("destination bytes", Files.readString(target.resolve("data.txt")));
+  }
+
+  @Test
   void renameOrMoveFolderFolder_rename_successfullyRenames() throws IOException {
     Files.createDirectory(tempDir.resolve("oldName"));
 

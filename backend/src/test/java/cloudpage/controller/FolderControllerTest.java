@@ -1,7 +1,7 @@
 package cloudpage.controller;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -203,6 +203,26 @@ class FolderControllerTest {
   }
 
   // ── PATCH /api/folders ───────────────────────────────────────────────────
+
+  @Test
+  void renameOrMoveFolder_occupiedDestination_returns409WithoutChangingFolders() throws Exception {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Path target = Files.createDirectory(tempDir.resolve("target"));
+    Files.writeString(source.resolve("data.txt"), "source bytes");
+    Files.writeString(target.resolve("data.txt"), "destination bytes");
+    doCallRealMethod().when(folderService).moveFolder(anyString(), anyString(), anyString());
+
+    mockMvc
+        .perform(patch("/api/folders").param("folderPath", "source").param("newPath", "target"))
+        .andExpect(status().isConflict())
+        .andExpect(content().string("Destination already exists: target"));
+
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "source bytes", Files.readString(source.resolve("data.txt")));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "destination bytes", Files.readString(target.resolve("data.txt")));
+    verify(folderService, never()).getFolderTree(anyString(), anyBoolean());
+  }
 
   @Test
   void renameOrMoveFolder_validRequest_returnsUpdatedTree() throws Exception {
