@@ -1181,6 +1181,66 @@ class FolderServiceTest {
     assertEquals(2, results.size());
   }
 
+  @Test
+  void searchInFolder_excludesTrashDirectory() throws IOException {
+    Path trash = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
+    Files.writeString(trash.resolve("report-trashed.txt"), "x");
+    Files.writeString(tempDir.resolve("report-live.txt"), "x");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    assertEquals(1, results.size());
+    assertEquals("report-live.txt", results.get(0).getName());
+  }
+
+  @Test
+  void searchInFolder_pathTraversal_throwsInvalidPathException() {
+    assertThrows(
+        InvalidPathException.class,
+        () -> folderService.searchInFolder(tempDir.toString(), "../../etc", "report", 20, 0));
+  }
+
+  @Test
+  void searchInFolder_belowMinScore_isNotReturned() throws IOException {
+    Files.writeString(tempDir.resolve("report.txt"), "x");
+    Files.writeString(tempDir.resolve("zzzzzzzz.bin"), "x");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 90);
+
+    assertEquals(1, results.size());
+    assertEquals("report.txt", results.get(0).getName());
+  }
+
+  @Test
+  void searchInFolder_respectsMaxResults() throws IOException {
+    for (int i = 0; i < 5; i++) {
+      Files.writeString(tempDir.resolve("report-" + i + ".txt"), "x");
+    }
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 2, 0);
+
+    assertEquals(2, results.size());
+  }
+
+  @Test
+  void searchInFolder_brokenSymlink_isSkippedAndOtherResultsStillReturned() throws IOException {
+    try {
+      Files.createSymbolicLink(tempDir.resolve("report-broken"), tempDir.resolve("does-not-exist"));
+    } catch (UnsupportedOperationException | IOException | SecurityException exception) {
+      assumeTrue(false, "Symbolic links are not available: " + exception.getMessage());
+    }
+    Files.writeString(tempDir.resolve("report-ok.txt"), "x");
+
+    List<SearchResult> results =
+        folderService.searchInFolder(tempDir.toString(), "", "report", 20, 0);
+
+    assertEquals(1, results.size());
+    assertEquals("report-ok.txt", results.get(0).getName());
+  }
+
   // ── folder archive download ──────────────────────────────────────────────
 
   @Test
