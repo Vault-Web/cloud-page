@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,7 +37,6 @@ class CommentServiceTest {
   @Mock private CommentRepository commentRepository;
   @Mock private UserRepository userRepository;
   @Mock private NotificationService notificationService;
-  @Mock private FolderService folderService;
 
   @TempDir Path tempDir;
 
@@ -48,8 +46,7 @@ class CommentServiceTest {
 
   @BeforeEach
   void setUp() {
-    service =
-        new CommentService(commentRepository, userRepository, notificationService, folderService);
+    service = new CommentService(commentRepository, userRepository, notificationService);
 
     alice = new User();
     alice.setId("user-alice");
@@ -74,7 +71,6 @@ class CommentServiceTest {
 
     when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
     when(userRepository.findByUsername("bob")).thenReturn(Optional.of(bob));
-    doNothing().when(folderService).validatePath(eq(alice.getRootFolderPath()), any(Path.class));
 
     Comment savedComment = new Comment();
     savedComment.setId(42L);
@@ -113,7 +109,6 @@ class CommentServiceTest {
     request.setContent("Hey @alice self mention check");
 
     when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
-    doNothing().when(folderService).validatePath(eq(alice.getRootFolderPath()), any(Path.class));
 
     Comment savedComment = new Comment();
     savedComment.setId(43L);
@@ -159,7 +154,6 @@ class CommentServiceTest {
     Path targetFile = Files.createFile(tempDir.resolve("document.pdf"));
 
     when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
-    doNothing().when(folderService).validatePath(eq(alice.getRootFolderPath()), any(Path.class));
 
     Comment comment = new Comment();
     comment.setId(101L);

@@ -9,6 +9,7 @@ import cloudpage.model.Comment;
 import cloudpage.model.User;
 import cloudpage.repository.CommentRepository;
 import cloudpage.repository.UserRepository;
+import cloudpage.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,7 +33,6 @@ public class CommentService {
   private final CommentRepository commentRepository;
   private final UserRepository userRepository;
   private final NotificationService notificationService;
-  private final FolderService folderService;
 
   private static final Pattern MENTION_PATTERN = Pattern.compile("@([a-zA-Z0-9_\\-\\.]+)");
 
@@ -51,7 +51,7 @@ public class CommentService {
 
     // Validate that the file/folder actually exists in the workspace
     Path fullPath = Paths.get(owner.getRootFolderPath(), request.getFilePath()).normalize();
-    folderService.validatePath(owner.getRootFolderPath(), fullPath);
+    FileUtils.validatePath(owner.getRootFolderPath(), fullPath);
 
     if (!Files.exists(fullPath)) {
       throw new FileNotFoundException(
@@ -89,7 +89,7 @@ public class CommentService {
 
     // Validate that the file/folder actually exists
     Path fullPath = Paths.get(owner.getRootFolderPath(), filePath).normalize();
-    folderService.validatePath(owner.getRootFolderPath(), fullPath);
+    FileUtils.validatePath(owner.getRootFolderPath(), fullPath);
 
     if (!Files.exists(fullPath)) {
       throw new FileNotFoundException("Target file or folder not found at path: " + filePath);
