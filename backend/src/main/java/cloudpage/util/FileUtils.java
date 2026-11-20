@@ -1,11 +1,12 @@
 package cloudpage.util;
 
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.stream.Stream;
 
 /** Contains utility functions for handling and processing files */
@@ -96,7 +97,13 @@ public final class FileUtils {
     Path target = Paths.get(rootPath, relativeDestinationPath).normalize();
     validatePath(rootPath, source);
     validatePath(rootPath, target);
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    try {
+      // Use the provider's non-replacing move instead of a separate existence check.
+      Files.move(source, target);
+    } catch (FileAlreadyExistsException e) {
+      throw new ResourceAlreadyExistsException(
+          "Destination already exists: " + relativeDestinationPath);
+    }
   }
 
   /**
