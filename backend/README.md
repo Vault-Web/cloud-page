@@ -40,6 +40,23 @@ The application starts on port `8090` by default.
 
 ## Running Tests
 
+### Storage quota concurrency
+
+Direct uploads, shared-folder uploads, shared edits and trash restores serialize their quota
+check and write using the same real-root lock. Different users' roots remain independent;
+root symlink aliases share one lock. Trash remains excluded from active usage, and replacements
+count only their size difference. Locks include pending writers and are removed after use.
+File/folder moves and trash moves (including database-failure compensation) also hold that lock
+so usage measurement cannot miss relocated bytes or race with a compensating restore.
+
+This protects the current single-instance Cloud deployment only. External filesystem writers
+(including synchronization tools) and additional Cloud instances do not participate; multiple
+instances require a shared reservation mechanism before rollout. No schema, API, environment
+or stored-file migration is needed. Deploy through the existing single-instance update process;
+rolling back the application restores the earlier concurrency behavior without changing data.
+
+Run the concurrent quota regressions with `./mvnw -Dtest=StorageQuotaConcurrencyTest test`.
+
 Run all backend tests with:
 
 ```bash
