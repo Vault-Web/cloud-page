@@ -9,7 +9,9 @@ import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceAlreadyExistsException;
 import cloudpage.exceptions.ResourceConflictException;
 import cloudpage.exceptions.ResourceNotFoundException;
+import cloudpage.util.FailingInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +31,42 @@ class FileServiceTest {
   }
 
   // ── uploadFile ───────────────────────────────────────────────────────────
+
+  @Test
+  void uploadFile_replacementInterruptedMidWrite_keepsOriginalFile() throws IOException {
+    Path docs = Files.createDirectory(tempDir.resolve("docs"));
+    Path existing = Files.writeString(docs.resolve("hello.txt"), "original");
+    String etag = fileService.loadAsResource(existing).getETag();
+    MockMultipartFile interrupted =
+        new MockMultipartFile("file", "hello.txt", "text/plain", "replacement".getBytes()) {
+          @Override
+          public InputStream getInputStream() {
+            return new FailingInputStream("repl");
+          }
+        };
+
+    assertThrows(
+        IOException.class,
+        () -> fileService.uploadFile(tempDir.toString(), "docs", interrupted, null, etag));
+
+    assertEquals("original", Files.readString(existing));
+    try (var entries = Files.list(docs)) {
+      assertEquals(1, entries.count(), "an interrupted upload must not leave a temporary file");
+    }
+  }
+
+  @Test
+  void uploadFile_replacementCompletes_replacesContent() throws IOException {
+    Path docs = Files.createDirectory(tempDir.resolve("docs"));
+    Path existing = Files.writeString(docs.resolve("hello.txt"), "original");
+    String etag = fileService.loadAsResource(existing).getETag();
+    MockMultipartFile replacement =
+        new MockMultipartFile("file", "hello.txt", "text/plain", "replacement".getBytes());
+
+    fileService.uploadFile(tempDir.toString(), "docs", replacement, null, etag);
+
+    assertEquals("replacement", Files.readString(existing));
+  }
 
   @Test
   void uploadFile_normalUpload_createsFile() throws IOException {

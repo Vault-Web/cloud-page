@@ -15,13 +15,10 @@ import cloudpage.repository.ResourceShareRepository;
 import cloudpage.repository.UserRepository;
 import cloudpage.util.FileUtils;
 import java.io.IOException;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Clock;
 import java.util.HashSet;
@@ -251,19 +248,14 @@ public class ResourceShareService {
               file.getSize(),
               resolved.ownerQuotaMb());
 
-          try (var input = file.getInputStream();
-              FileChannel channel =
-                  FileChannel.open(
-                      resolved.target(), StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-            Path currentTarget =
-                resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
-            if (Files.isSymbolicLink(resolved.target())
-                || !currentTarget.startsWith(resolved.sharedRoot())
-                || !currentTarget.startsWith(resolved.ownerRoot())) {
-              throw new InvalidPathException("Shared edit target is no longer inside its share");
-            }
-            channel.truncate(0);
-            input.transferTo(Channels.newOutputStream(channel));
+          Path currentTarget = resolved.target().toRealPath(LinkOption.NOFOLLOW_LINKS).normalize();
+          if (Files.isSymbolicLink(resolved.target())
+              || !currentTarget.startsWith(resolved.sharedRoot())
+              || !currentTarget.startsWith(resolved.ownerRoot())) {
+            throw new InvalidPathException("Shared edit target is no longer inside its share");
+          }
+          try (var input = file.getInputStream()) {
+            FileUtils.replaceAtomically(currentTarget, input);
           }
         });
   }
