@@ -9,10 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cloudpage.exceptions.InvalidPathException;
 import cloudpage.exceptions.ResourceAlreadyExistsException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -215,5 +218,68 @@ class FileUtilsTest {
     Files.write(trash.resolve("deleted.txt"), new byte[1024 * 1024]);
 
     assertDoesNotThrow(() -> FileUtils.validateStorageSizeWithinQuota(tempDir.toString(), 1, 1L));
+  }
+
+  // ── replaceAtomically ────────────────────────────────────────────────────
+
+  @Test
+  void replaceAtomically_replacesExistingContent() throws IOException {
+    Path target = Files.writeString(tempDir.resolve("notes.txt"), "before");
+
+    FileUtils.replaceAtomically(target, new ByteArrayInputStream("after".getBytes()));
+
+    assertEquals("after", Files.readString(target));
+    assertEquals(1, directoryEntries(), "no temporary file may be left behind");
+  }
+
+  @Test
+  void replaceAtomically_createsMissingTarget() throws IOException {
+    Path target = tempDir.resolve("new.txt");
+
+    FileUtils.replaceAtomically(target, new ByteArrayInputStream("fresh".getBytes()));
+
+    assertEquals("fresh", Files.readString(target));
+    assertEquals(1, directoryEntries(), "no temporary file may be left behind");
+  }
+
+  @Test
+  void replaceAtomically_failureMidWrite_keepsOriginalContent() throws IOException {
+    Path target = Files.writeString(tempDir.resolve("notes.txt"), "original");
+
+    assertThrows(
+        IOException.class,
+        () -> FileUtils.replaceAtomically(target, new FailingInputStream("partial-new-bytes")));
+
+    assertEquals("original", Files.readString(target));
+    assertEquals(1, directoryEntries(), "the failed write must not leave a temporary file");
+  }
+
+  @Test
+  void replaceAtomically_failureMidWrite_doesNotCreateMissingTarget() throws IOException {
+    Path target = tempDir.resolve("new.txt");
+
+    assertThrows(
+        IOException.class,
+        () -> FileUtils.replaceAtomically(target, new FailingInputStream("partial")));
+
+    assertFalse(Files.exists(target));
+    assertEquals(0, directoryEntries(), "the failed write must not leave a temporary file");
+  }
+
+  @Test
+  void replaceAtomically_keepsPermissionsOfReplacedFile() throws IOException {
+    Path target = Files.writeString(tempDir.resolve("notes.txt"), "before");
+    Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-r-----"));
+
+    FileUtils.replaceAtomically(target, new ByteArrayInputStream("after".getBytes()));
+
+    assertEquals(
+        PosixFilePermissions.fromString("rw-r-----"), Files.getPosixFilePermissions(target));
+  }
+
+  private long directoryEntries() throws IOException {
+    try (Stream<Path> entries = Files.list(tempDir)) {
+      return entries.count();
+    }
   }
 }

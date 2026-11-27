@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -57,6 +58,9 @@ public class FolderService {
       Pattern.compile("^(.+)\\.sync-conflict-\\d{8}-\\d{6}-[^.]+(\\..+)?$");
 
   private final JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+
+  /** A path that matched the search query by name, before any file metadata has been read. */
+  private record Candidate(Path path, int score) {}
 
   private boolean isSyncthingConflict(String fileName) {
     return SYNCTHING_CONFLICT_PATTERN.matcher(fileName).matches();
@@ -137,8 +141,10 @@ public class FolderService {
       return stream
           .filter(p -> !p.equals(folder))
           .filter(p -> !p.startsWith(trashDir))
-          .map(p -> createSearchResult(p, lowerQuery, rootAbsolute))
-          .filter(r -> r.getScore() >= minScore)
+          .map(p -> new Candidate(p, scoreName(p, lowerQuery)))
+          .filter(c -> c.score() >= minScore)
+          .map(c -> buildSearchResult(c, rootAbsolute))
+          .flatMap(Optional::stream)
           .filter(r -> matchesFilter(r, effectiveFilter))
           .sorted(searchComparator(effectiveFilter))
           .limit(maxResults)
@@ -203,19 +209,17 @@ public class FolderService {
   }
 
   /**
-   * Creates a {@link SearchResult} for a given path by calculating its similarity to the query. The
-   * score is calculated using the Jaro-Winkler algorithm. If the file name contains the query as a
-   * substring, the score is boosted to at least 95.
+   * Calculates the similarity of a file or folder name to the query. The score is calculated using
+   * the Jaro-Winkler algorithm. If the name contains the query as a substring, the score is boosted
+   * to at least 95. Only the name is inspected, so this performs no file system access.
    *
    * @param path the path of the file or folder to evaluate
    * @param query the search term in lowercase
-   * @return a {@link SearchResult} with the calculated similarity score
-   * @throws FileNotFoundException if the file or folder metadata cannot be read
+   * @return the similarity score between 0 and 100
    */
-  private SearchResult createSearchResult(Path path, String query, Path rootAbsolute) {
-    String name = path.getFileName().toString();
+  private int scoreName(Path path, String query) {
     // Locale.ROOT prevents using the system's local language for case conversion
-    String lowerName = name.toLowerCase(Locale.ROOT);
+    String lowerName = path.getFileName().toString().toLowerCase(Locale.ROOT);
 
     // Jaro-Winkler Score
     int score = (int) (jaroWinkler.apply(lowerName, query) * 100);
@@ -224,21 +228,36 @@ public class FolderService {
     if (lowerName.contains(query)) {
       score = Math.max(score, 95);
     }
+    return score;
+  }
 
+  /**
+   * Reads the metadata of a matching candidate and builds its {@link SearchResult}. Entries whose
+   * metadata cannot be read (for example dangling links or files removed during the walk) are
+   * skipped, so one unreadable entry does not fail the whole search.
+   *
+   * @param candidate the matching path and its precomputed score
+   * @param rootAbsolute the user's absolute root, used to build the root-relative result path
+   * @return the result, or empty if the entry must be skipped
+   */
+  private Optional<SearchResult> buildSearchResult(Candidate candidate, Path rootAbsolute) {
+    Path path = candidate.path();
     try {
       Path lexicalPath = path.toAbsolutePath().normalize();
       String relativePath = toRelativePath(rootAbsolute, lexicalPath);
       boolean isDir = Files.isDirectory(path);
-      return new SearchResult(
-          name,
-          relativePath,
-          isDir ? "folder" : "file",
-          isDir ? null : Files.size(path),
-          isDir ? null : Files.probeContentType(path),
-          Files.getLastModifiedTime(path).toMillis(),
-          score);
-    } catch (IOException e) {
-      throw new FileNotFoundException("Could not read file or folder: " + path);
+      return Optional.of(
+          new SearchResult(
+              path.getFileName().toString(),
+              relativePath,
+              isDir ? "folder" : "file",
+              isDir ? null : Files.size(path),
+              isDir ? null : Files.probeContentType(path),
+              Files.getLastModifiedTime(path).toMillis(),
+              candidate.score()));
+    } catch (IOException | UncheckedIOException e) {
+      log.debug("Skipping unreadable search result: {}", e.getMessage());
+      return Optional.empty();
     }
   }
 
