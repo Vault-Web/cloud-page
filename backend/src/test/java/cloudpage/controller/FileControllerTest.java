@@ -154,6 +154,22 @@ class FileControllerTest {
   // ── PATCH /api/files/move ────────────────────────────────────────────────
 
   @Test
+  void renameOrMoveFile_occupiedDestination_returns409WithoutChangingFiles() throws Exception {
+    Path source = Files.writeString(tempDir.resolve("source.txt"), "source bytes");
+    Path target = Files.writeString(tempDir.resolve("target.txt"), "destination bytes");
+    doCallRealMethod().when(fileService).moveFile(anyString(), anyString(), anyString());
+
+    mockMvc
+        .perform(
+            patch("/api/files/move").param("filePath", "source.txt").param("newPath", "target.txt"))
+        .andExpect(status().isConflict())
+        .andExpect(content().string("Destination already exists: target.txt"));
+
+    org.junit.jupiter.api.Assertions.assertEquals("source bytes", Files.readString(source));
+    org.junit.jupiter.api.Assertions.assertEquals("destination bytes", Files.readString(target));
+  }
+
+  @Test
   void renameOrMoveFile_validRequest_returns200() throws Exception {
     mockMvc
         .perform(

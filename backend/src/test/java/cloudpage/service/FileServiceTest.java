@@ -445,6 +445,19 @@ class FileServiceTest {
   // ── renameOrMoveFile ─────────────────────────────────────────────────────
 
   @Test
+  void moveFile_occupiedDestination_preservesBothFiles() throws IOException {
+    Path source = Files.writeString(tempDir.resolve("source.txt"), "source bytes");
+    Path target = Files.writeString(tempDir.resolve("target.txt"), "destination bytes");
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> fileService.moveFile(tempDir.toString(), "source.txt", "target.txt"));
+
+    assertEquals("source bytes", Files.readString(source));
+    assertEquals("destination bytes", Files.readString(target));
+  }
+
+  @Test
   void renameOrMoveFile_renameInSameFolder() throws IOException {
     Files.writeString(tempDir.resolve("old.txt"), "data");
 

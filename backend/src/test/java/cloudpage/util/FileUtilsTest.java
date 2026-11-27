@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,10 +18,72 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class FileUtilsTest {
 
   @TempDir Path tempDir;
+
+  @ParameterizedTest
+  @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+  void move_occupiedDestination_preservesBothEntries(boolean sourceFolder, boolean targetFolder)
+      throws IOException {
+    Path source = tempDir.resolve("source");
+    Path target = tempDir.resolve("target");
+    Path sourceData = sourceFolder ? Files.createDirectory(source).resolve("data.txt") : source;
+    Path targetData = targetFolder ? Files.createDirectory(target).resolve("data.txt") : target;
+    Files.writeString(sourceData, "source bytes");
+    Files.writeString(targetData, "destination bytes");
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> FileUtils.move(tempDir.toString(), "./source", "unused/../target"));
+
+    assertEquals("source bytes", Files.readString(sourceData));
+    assertEquals("destination bytes", Files.readString(targetData));
+    assertFalse(Files.exists(tempDir.resolve(".trash")));
+  }
+
+  @Test
+  void move_emptyDestinationFolder_isNotReplaced() throws IOException {
+    Path source = Files.createDirectory(tempDir.resolve("source"));
+    Files.writeString(source.resolve("data.txt"), "source bytes");
+    Path target = Files.createDirectory(tempDir.resolve("target"));
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> FileUtils.move(tempDir.toString(), "source", "target"));
+
+    assertEquals("source bytes", Files.readString(source.resolve("data.txt")));
+    try (var children = Files.list(target)) {
+      assertEquals(0, children.count());
+    }
+  }
+
+  @Test
+  void move_danglingDestinationSymlink_isNotReplaced() throws IOException {
+    Path source = Files.writeString(tempDir.resolve("source"), "source bytes");
+    Path missing = tempDir.resolve("missing");
+    Path target = Files.createSymbolicLink(tempDir.resolve("target"), missing);
+
+    assertThrows(
+        ResourceAlreadyExistsException.class,
+        () -> FileUtils.move(tempDir.toString(), "source", "target"));
+
+    assertEquals("source bytes", Files.readString(source));
+    assertTrue(Files.isSymbolicLink(target));
+    assertEquals(missing, Files.readSymbolicLink(target));
+  }
+
+  @Test
+  void move_normalizedSamePath_preservesFile() throws IOException {
+    Path source = Files.writeString(tempDir.resolve("source"), "source bytes");
+
+    FileUtils.move(tempDir.toString(), "source", "./unused/../source");
+
+    assertEquals("source bytes", Files.readString(source));
+  }
 
   @Test
   void test_resolveExistingFilePath_inRootDirectory_ok() throws IOException {

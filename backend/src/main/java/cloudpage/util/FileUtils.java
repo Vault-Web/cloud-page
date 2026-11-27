@@ -1,9 +1,11 @@
 package cloudpage.util;
 
 import cloudpage.exceptions.InvalidPathException;
+import cloudpage.exceptions.ResourceAlreadyExistsException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -104,7 +106,16 @@ public final class FileUtils {
     validatePath(rootPath, source);
     validatePath(rootPath, target);
     StorageQuotaLock.withLock(
-        Paths.get(rootPath), () -> Files.move(source, target, StandardCopyOption.REPLACE_EXISTING));
+        Paths.get(rootPath),
+        () -> {
+          try {
+            // Use the provider's non-replacing move instead of a separate existence check.
+            Files.move(source, target);
+          } catch (FileAlreadyExistsException e) {
+            throw new ResourceAlreadyExistsException(
+                "Destination already exists: " + relativeDestinationPath);
+          }
+        });
   }
 
   /**
