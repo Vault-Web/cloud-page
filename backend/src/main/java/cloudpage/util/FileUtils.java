@@ -103,7 +103,8 @@ public final class FileUtils {
     Path target = Paths.get(rootPath, relativeDestinationPath).normalize();
     validatePath(rootPath, source);
     validatePath(rootPath, target);
-    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    StorageQuotaLock.withLock(
+        Paths.get(rootPath), () -> Files.move(source, target, StandardCopyOption.REPLACE_EXISTING));
   }
 
   /**
@@ -193,6 +194,10 @@ public final class FileUtils {
    */
   public static long calculateDirectorySize(Path path) throws IOException {
     if (!Files.exists(path)) return 0;
+
+    // Files.walk does not traverse a symlink supplied as its starting directory.
+    // Measure the same real root used by the quota lock, including root aliases.
+    path = path.toRealPath();
 
     Path trashPath = path.resolve(TRASH_DIR);
     try (Stream<Path> paths = Files.walk(path)) {
