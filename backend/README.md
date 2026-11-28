@@ -154,8 +154,8 @@ validation as other file and folder APIs.
 
 ## Secure Send
 
-Secure Send exposes one file through an opaque, expiring external URL. It is separate from
-user-to-user sharing: the recipient does not need an account and cannot browse the owner's files.
+Secure Send exposes one file or folder through an opaque external URL. The recipient can browse
+only the shared folder and its contents, without a Vault Web account.
 
 All management endpoints require the normal JWT:
 
@@ -187,8 +187,14 @@ X-Secure-Send-Password: optional password
 ```
 
 Passwords are sent in a header so they do not appear in URLs or browser history. Unknown, expired,
-revoked, deleted, or moved targets return `404`; an incorrect or missing required password returns
-`401`. A link never accepts a file path and therefore cannot be used to list or select another file.
+revoked, or unavailable targets return `404`. An incorrect or missing required password returns
+`401`. A folder link accepts paths only within the shared folder.
+
+Each link is bound to the original filesystem entry. Create a new link after moving the resource
+or replacing it with a different filesystem entry, including saves that replace the file atomically.
+Links created before the resource binding was introduced are unavailable because their original
+entries cannot be verified. The management API marks them with `requiresNewLink` so owners can
+recreate the links they still need.
 
 Secure Send expiry, cleanup, and rate limits are configurable with
 `cloudpage.secure-send.*` and `cloudpage.rate-limit.per-client.secure-send-*` properties. Expiry

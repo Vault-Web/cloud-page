@@ -106,21 +106,16 @@ public class SecureSendService {
           "Expiry must be in the future and no more than " + maxExpiry.toDays() + " days away");
     }
 
-    Path requested = Paths.get(owner.getRootFolderPath(), relativeFilePath).normalize();
-    FileUtils.validatePath(owner.getRootFolderPath(), requested);
-    rejectTrashPath(parseChildPath(relativeFilePath));
-    if (!Files.isReadable(requested)
-        || !(Files.isRegularFile(requested) || Files.isDirectory(requested))) {
+    parseChildPath(relativeFilePath);
+    Path targetReal = FileUtils.resolveActivePath(owner.getRootFolderPath(), relativeFilePath);
+    if (!Files.isReadable(targetReal)
+        || !(Files.isRegularFile(targetReal) || Files.isDirectory(targetReal))) {
       throw new ResourceNotFoundException("Resource", "Path", relativeFilePath);
     }
 
     // Resolve and store the canonical target so the original symlink cannot later redirect the
     // link, while retaining a portable path relative to the owner's root.
     Path rootReal = Paths.get(owner.getRootFolderPath()).toRealPath().normalize();
-    Path targetReal = requested.toRealPath().normalize();
-    if (!targetReal.startsWith(rootReal)) {
-      throw new ResourceNotFoundException("Resource", "Path", relativeFilePath);
-    }
     if (targetReal.equals(rootReal)) {
       throw new IllegalArgumentException("The storage root itself cannot be shared as a link");
     }
@@ -131,6 +126,11 @@ public class SecureSendService {
     send.setOwnerId(owner.getId());
     send.setTokenHash(hashToken(token));
     send.setRelativeFilePath(rootReal.relativize(targetReal).toString());
+    String identity = resourceIdentity(targetReal);
+    if (identity == null) {
+      throw new IllegalArgumentException("Cannot identify this file or folder for Secure Send");
+    }
+    send.setResourceIdentity(identity);
     send.setDisplayName(targetReal.getFileName().toString());
     send.setResourceType(
         Files.isDirectory(targetReal) ? SharedResourceType.FOLDER : SharedResourceType.FILE);
@@ -172,6 +172,7 @@ public class SecureSendService {
     if (send.getExpiresAt() != null && !send.getExpiresAt().isAfter(clock.instant())) {
       throw new IllegalArgumentException("Expired links cannot be reactivated");
     }
+    resolveWithin(send, "");
     send.setRevokedAt(null);
     secureSendRepository.save(send);
   }
@@ -286,7 +287,7 @@ public class SecureSendService {
             .findByTokenHash(hashToken(token))
             .orElseThrow(SecureSendUnavailableException::new);
     boolean expired = send.getExpiresAt() != null && !send.getExpiresAt().isAfter(clock.instant());
-    if (send.getRevokedAt() != null || expired) {
+    if (send.getRevokedAt() != null || expired || send.getResourceIdentity() == null) {
       throw new SecureSendUnavailableException();
     }
     return send;
@@ -315,10 +316,10 @@ public class SecureSendService {
         userRepository.findById(send.getOwnerId()).orElseThrow(SecureSendUnavailableException::new);
     try {
       Path rootReal = Paths.get(owner.getRootFolderPath()).toRealPath().normalize();
-      Path requested = rootReal.resolve(send.getRelativeFilePath()).normalize();
-      FileUtils.validatePath(rootReal.toString(), requested);
-      Path sharedRoot = requested.toRealPath().normalize();
-      if (!sharedRoot.startsWith(rootReal)) {
+      Path sharedRoot =
+          FileUtils.resolveActivePath(rootReal.toString(), send.getRelativeFilePath());
+      if (send.getResourceIdentity() == null
+          || !send.getResourceIdentity().equals(resourceIdentity(sharedRoot))) {
         throw new SecureSendUnavailableException();
       }
 
@@ -339,6 +340,15 @@ public class SecureSendService {
     } catch (IOException | RuntimeException exception) {
       throw new SecureSendUnavailableException();
     }
+  }
+
+  private String resourceIdentity(Path path) throws IOException {
+    BasicFileAttributes attributes =
+        Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    if (attributes.fileKey() == null || !(attributes.isRegularFile() || attributes.isDirectory())) {
+      return null;
+    }
+    return sha256(attributes.fileKey() + "\n" + attributes.creationTime());
   }
 
   private Path parseChildPath(String value) {
@@ -374,6 +384,7 @@ public class SecureSendService {
         send.getExpiresAt(),
         send.getPasswordHash() != null,
         send.getRevokedAt() != null,
+        send.getResourceIdentity() == null,
         send.getLastAccessedAt());
   }
 
@@ -392,9 +403,13 @@ public class SecureSendService {
     if (!StringUtils.hasText(token)) {
       throw new SecureSendUnavailableException();
     }
+    return sha256(token);
+  }
+
+  private String sha256(String value) {
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
+      return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
     } catch (NoSuchAlgorithmException exception) {
       throw new IllegalStateException("SHA-256 algorithm not available", exception);
     }
