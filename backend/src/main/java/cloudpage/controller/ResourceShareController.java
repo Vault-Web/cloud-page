@@ -101,7 +101,7 @@ public class ResourceShareController {
     return fileResponse(result, true);
   }
 
-  @PutMapping("/{id}/edit")
+  @PutMapping(value = "/{id}/edit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<Void> editFile(
       @PathVariable String id,
       @RequestParam(required = false, defaultValue = "") String path,
@@ -112,7 +112,7 @@ public class ResourceShareController {
     return ResponseEntity.noContent().build();
   }
 
-  @PostMapping("/{id}/upload")
+  @PostMapping(value = "/{id}/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<Void> upload(
       @PathVariable String id,
       @RequestParam(required = false, defaultValue = "") String path,

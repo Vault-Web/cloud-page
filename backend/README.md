@@ -40,6 +40,35 @@ The application starts on port `8090` by default.
 
 ## Running Tests
 
+### Versioned OpenAPI contract
+
+The checked-in [`openapi/cloud-page-v1.json`](openapi/cloud-page-v1.json) is the
+provider contract for client generation. Regenerate it with Java 21:
+
+```bash
+./mvnw -Dtest=OpenApiContractTest -Dcloud.openapi.write=true test
+```
+
+The export starts Springdoc against an isolated in-memory database with fixture
+credentials. It normalizes the mock server URL and object key order. `./mvnw
+verify` regenerates and compares the result byte for byte. Commit contract
+changes with their controller or DTO changes so consumers can review the diff.
+
+Consumers should fetch the contract at an exact Cloud Page commit:
+
+```bash
+git show <cloud-page-commit>:backend/openapi/cloud-page-v1.json > cloud-page.json
+sha256sum cloud-page.json
+```
+
+Direct Cloud Page routes begin with `/api`. The Vault Web reverse proxy maps
+`/cloud-api` to that prefix. Keep the host and routing choice in client runtime
+configuration. Internal requests use `Authorization: Bearer <access-token>`.
+Public link routes use the link's access controls and optional password header.
+Use an OpenAPI 3.1 generator that handles nullable type unions and binary
+responses. The contract test exercises the paginated folder listing and ZIP
+schema alongside drift detection.
+
 ### Storage quota concurrency
 
 Direct uploads, shared-folder uploads, shared edits and trash restores serialize their quota
