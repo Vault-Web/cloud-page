@@ -92,6 +92,7 @@ class SecureSendControllerTest {
                     send.getExpiresAt(),
                     false,
                     false,
+                    false,
                     null));
 
     mockMvc

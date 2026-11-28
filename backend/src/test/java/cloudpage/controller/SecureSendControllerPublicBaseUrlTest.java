@@ -76,6 +76,7 @@ class SecureSendControllerPublicBaseUrlTest {
                     send.getExpiresAt(),
                     false,
                     false,
+                    false,
                     null));
 
     mockMvc

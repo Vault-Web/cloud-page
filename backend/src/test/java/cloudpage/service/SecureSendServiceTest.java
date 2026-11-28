@@ -27,6 +27,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -348,6 +350,42 @@ class SecureSendServiceTest {
     when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
 
     assertDoesNotThrow(() -> service.describe(created.token()));
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void bindingRejectsAReplacementAtTheOriginalPath(boolean directory) throws Exception {
+    Path target = tempDir.resolve("shared");
+    if (directory) {
+      Files.createDirectory(target);
+    } else {
+      Files.writeString(target, "original");
+    }
+    CreatedSecureSend created = service.create(owner, "shared", NOW.plusSeconds(60), null);
+    when(secureSendRepository.findByTokenHash(created.secureSend().getTokenHash()))
+        .thenReturn(Optional.of(created.secureSend()));
+    when(userRepository.findById("owner-1")).thenReturn(Optional.of(owner));
+    assertDoesNotThrow(() -> service.describe(created.token()));
+
+    Files.move(target, tempDir.resolve("original"));
+    if (directory) {
+      Files.createDirectory(target);
+    } else {
+      Files.writeString(target, "replacement");
+    }
+    assertThrows(SecureSendUnavailableException.class, () -> service.describe(created.token()));
+  }
+
+  @Test
+  void legacyLinkNeedsToBeRecreated() throws Exception {
+    Files.writeString(tempDir.resolve("report.pdf"), "report");
+    CreatedSecureSend created = service.create(owner, "report.pdf", NOW.plusSeconds(60), null);
+    SecureSend send = created.secureSend();
+    send.setResourceIdentity(null);
+    when(secureSendRepository.findByTokenHash(send.getTokenHash())).thenReturn(Optional.of(send));
+
+    assertTrue(service.toDto(send, null).isRequiresNewLink());
+    assertThrows(SecureSendUnavailableException.class, () -> service.describe(created.token()));
   }
 
   @Test

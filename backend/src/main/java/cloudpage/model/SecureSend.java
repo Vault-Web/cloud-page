@@ -39,6 +39,10 @@ public class SecureSend {
   @Column(nullable = false, length = 4096)
   private String relativeFilePath;
 
+  /** Identity of the original filesystem entry. Older links need to be recreated. */
+  @Column(length = 64)
+  private String resourceIdentity;
+
   @Column(nullable = false)
   private String displayName;
 
