@@ -181,7 +181,8 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="uploadFile(java.lang.String,org.springframework.web.multipart.MultipartFile,java.lang.String)">
 <h3>uploadFile</h3>
-<div class="member-signature"><span class="annotations">@PostMapping("/upload")
+<div class="member-signature"><span class="annotations">@PostMapping(value="/upload",
+             consumes="multipart/form-data")
 </span><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="../dto/UploadResultDto.html" title="class in cloudpage.dto">UploadResultDto</a></span>&nbsp;<span class="element-name">uploadFile</span><wbr><span class="parameters">(@RequestParam
  <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;folderPath,
  @RequestParam

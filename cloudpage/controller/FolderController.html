@@ -210,7 +210,8 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="getFolderContent(java.lang.String,int,int,java.lang.String,boolean,boolean)">
 <h3>getFolderContent</h3>
-<div class="member-signature"><span class="annotations">@GetMapping("/content")
+<div class="member-signature"><span class="annotations">@GetMapping(value="/content",
+            produces="application/json")
 </span><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="../dto/PageResponseDto.html" title="class in cloudpage.dto">PageResponseDto</a>&lt;<a href="../dto/FolderContentItemDto.html" title="class in cloudpage.dto">FolderContentItemDto</a>&gt;</span>&nbsp;<span class="element-name">getFolderContent</span><wbr><span class="parameters">(@RequestParam(required=false,defaultValue="")
  <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;path,
  @RequestParam
