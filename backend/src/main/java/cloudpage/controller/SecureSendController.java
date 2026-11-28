@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -43,6 +44,8 @@ public class SecureSendController {
   public static final String PASSWORD_HEADER = "X-Secure-Send-Password";
 
   private static final String LANDING_PATH = "/s/{token}";
+  private static final Set<String> INLINE_TYPES =
+      Set.of("application/pdf", "image/jpeg", "image/png", "image/gif", "image/bmp", "text/plain");
 
   private final SecureSendService secureSendService;
   private final UserService userService;
@@ -129,7 +132,7 @@ public class SecureSendController {
     return fileResponse(secureSendService.resolve(token, password, path), true);
   }
 
-  /** Serves a file inline so the landing page can preview it instead of downloading it. */
+  /** Serves supported types inline for the guest preview. */
   @GetMapping("/public/secure-sends/{token}/view")
   public ResponseEntity<Resource> view(
       @PathVariable String token,
@@ -169,7 +172,9 @@ public class SecureSendController {
       mimeType = "application/octet-stream";
     }
     String disposition =
-        (attachment ? ContentDisposition.attachment() : ContentDisposition.inline())
+        (attachment || !INLINE_TYPES.contains(mimeType)
+                ? ContentDisposition.attachment()
+                : ContentDisposition.inline())
             .filename(result.getPath().getFileName().toString(), StandardCharsets.UTF_8)
             .build()
             .toString();
@@ -177,6 +182,7 @@ public class SecureSendController {
     return ResponseEntity.ok()
         .eTag(result.getFileResource().getETag())
         .lastModified(result.getFileResource().getLastModified())
+        .header("X-Content-Type-Options", "nosniff")
         .header(HttpHeaders.CONTENT_TYPE, mimeType)
         .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
         .body(result.getFileResource().getResource());

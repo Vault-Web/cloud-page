@@ -240,4 +240,19 @@ class SecureSendControllerTest {
         .andExpect(
             header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("inline")));
   }
+
+  @Test
+  void publicPreviewOffersUnsupportedTypesAsAttachments() throws Exception {
+    Path file = Files.writeString(tempDir.resolve("notes.html"), "<p>Notes</p>");
+    FileResource fileResource = new FileResource(new UrlResource(file.toUri()), "\"6-123\"", 123L);
+    when(secureSendService.resolve("token", null, ""))
+        .thenReturn(new SecureSendResource(file, fileResource));
+
+    mockMvc
+        .perform(get("/api/public/secure-sends/token/view"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+        .andExpect(
+            header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("attachment")));
+  }
 }
