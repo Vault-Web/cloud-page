@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,14 @@ public class JwtUtil {
   private final SecretKey SECRET_KEY;
 
   public JwtUtil(@Value("${jwt.secret}") String secret) {
-    this.SECRET_KEY = Keys.hmacShaKeyFor(secret.getBytes());
+    if (secret == null || secret.isBlank()) {
+      throw new IllegalArgumentException("Configure JWT_SECRET before starting Cloud Page");
+    }
+    byte[] key = secret.getBytes(StandardCharsets.UTF_8);
+    if (key.length < 32) {
+      throw new IllegalArgumentException("JWT_SECRET must contain at least 32 UTF-8 bytes");
+    }
+    this.SECRET_KEY = Keys.hmacShaKeyFor(key);
   }
 
   public String extractUsername(String token) {

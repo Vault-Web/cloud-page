@@ -27,6 +27,8 @@ The backend is responsible for:
 Cloud Page can be run independently for local development.
 
 Before starting the application, make sure the required Vault Web services, including PostgreSQL, are already running.
+Set `JWT_SECRET` in the Cloud Page process environment to the same access-token signing key as
+the Vault Web backend. It must contain at least 32 UTF-8 bytes.
 
 Start the backend with:
 
@@ -293,14 +295,16 @@ cd cloud-page
 Create a `.env` file in the root directory with:
 
 ```env
-# JWT config
-MASTER_KEY=your_master_key_here
+# Development access-token signing key, shared with Vault Web
+JWT_SECRET=
 ````
 
 > 📝 Make sure **PostgreSQL from the Vault Web Docker setup is running** before starting Cloud Page.
 > Run `docker compose up -d` in the Vault Web repository if not already running.
 > The database credentials are inherited from the Vault Web `.env` setup.
 > Do **not** use production secrets during local development.
+> Generate a development key with `openssl rand -hex 32` and load the private `.env`
+> into the environment of both services before starting them.
 
 ---
 
