@@ -128,6 +128,18 @@ class FileUtilsTest {
   }
 
   @Test
+  void resolveActivePathKeepsTrashOutsideOrdinaryFileAccess() throws IOException {
+    Path activeFile = Files.createFile(tempDir.resolve("document.txt"));
+    Path trash = Files.createDirectory(tempDir.resolve(FileUtils.TRASH_DIR));
+
+    assertEquals(
+        activeFile.toRealPath(), FileUtils.resolveActivePath(tempDir.toString(), "document.txt"));
+    assertThrows(
+        InvalidPathException.class,
+        () -> FileUtils.resolveActivePath(tempDir.toString(), trash.getFileName().toString()));
+  }
+
+  @Test
   void validatePath_outsideRoot_throwsInvalidPathException() {
     Path outside = tempDir.resolve("../../etc/passwd").normalize();
 

@@ -253,8 +253,7 @@ public class FileService {
   }
 
   public String readFileContent(String rootPath, String relativeFilePath) throws IOException {
-    Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    FileUtils.validatePath(rootPath, file);
+    Path file = FileUtils.resolveActivePath(rootPath, relativeFilePath);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", file.toString());
@@ -278,21 +277,13 @@ public class FileService {
    * @throws ResourceNotFoundException if the file does not exist or is not a regular file
    */
   public String calculateChecksum(String rootPath, String relativeFilePath) throws IOException {
-    Path file = Paths.get(rootPath, relativeFilePath).normalize();
-    FileUtils.validatePath(rootPath, file);
+    Path file = FileUtils.resolveActivePath(rootPath, relativeFilePath);
 
     if (!Files.exists(file) || !Files.isRegularFile(file)) {
       throw new ResourceNotFoundException("File", "FilePath", relativeFilePath);
     }
 
-    // Pin the fully resolved real path and re-check it is inside the root before opening it, so a
-    // symlink swap racing with validation cannot redirect the read to a host file outside the root.
-    Path realFile = file.toRealPath();
-    if (!realFile.startsWith(Paths.get(rootPath).toRealPath())) {
-      throw new InvalidPathException("Path traversal attempt detected: " + relativeFilePath);
-    }
-
-    try (InputStream in = Files.newInputStream(realFile)) {
+    try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
       return calculateChecksum(in);
     }
   }

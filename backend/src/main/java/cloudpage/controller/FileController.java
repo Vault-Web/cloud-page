@@ -53,8 +53,7 @@ public class FileController {
   @GetMapping("/content")
   public ResponseEntity<String> getFileContent(@RequestParam String path) throws IOException {
     var user = userService.getCurrentUser();
-    Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    FileUtils.validatePath(user.getRootFolderPath(), fullPath);
+    Path fullPath = FileUtils.resolveActivePath(user.getRootFolderPath(), path);
 
     if (!fullPath.toFile().exists() || !fullPath.toFile().isFile()) {
       throw new FileNotFoundException("File Not Found with path : " + path);
@@ -80,8 +79,7 @@ public class FileController {
   @GetMapping("/download")
   public ResponseEntity<Resource> downloadFile(@RequestParam String path) throws IOException {
     var user = userService.getCurrentUser();
-    Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    FileUtils.validatePath(user.getRootFolderPath(), fullPath); // ensure security
+    Path fullPath = FileUtils.resolveActivePath(user.getRootFolderPath(), path);
 
     FileResource result = fileService.loadAsResource(fullPath);
     String mimeType = Files.probeContentType(fullPath);
@@ -95,7 +93,7 @@ public class FileController {
         .header(HttpHeaders.CONTENT_TYPE, mimeType)
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
-            "attachment; filename=\"" + fullPath.getFileName() + "\"")
+            "attachment; filename=\"" + Paths.get(path).normalize().getFileName() + "\"")
         .body(result.getResource());
   }
 
@@ -103,8 +101,7 @@ public class FileController {
   public ResponseEntity<ResourceRegion> viewFile(
       @RequestParam String path, @RequestHeader HttpHeaders headers) throws IOException {
     var user = userService.getCurrentUser();
-    Path fullPath = Paths.get(user.getRootFolderPath(), path).normalize();
-    FileUtils.validatePath(user.getRootFolderPath(), fullPath);
+    Path fullPath = FileUtils.resolveActivePath(user.getRootFolderPath(), path);
 
     FileResource result = fileService.loadAsResource(fullPath);
     Resource resource = result.getResource();
@@ -118,7 +115,7 @@ public class FileController {
 
     ContentDisposition contentDisposition =
         ContentDisposition.inline()
-            .filename(fullPath.getFileName().toString(), StandardCharsets.UTF_8)
+            .filename(Paths.get(path).normalize().getFileName().toString(), StandardCharsets.UTF_8)
             .build();
 
     if (!ranges.isEmpty()) {

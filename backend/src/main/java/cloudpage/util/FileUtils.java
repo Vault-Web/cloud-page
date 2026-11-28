@@ -35,6 +35,16 @@ public final class FileUtils {
     FileUtils.validateAndResolvePathWithinRoot(rootPath, path);
   }
 
+  /** Resolves a path for ordinary file access, keeping the Trash storage private. */
+  public static Path resolveActivePath(String rootPath, String relativePath) throws IOException {
+    rejectTrashPath(Paths.get(relativePath).normalize());
+    Path rootReal = Paths.get(rootPath).toRealPath().normalize();
+    Path requested = Paths.get(rootPath, relativePath).normalize();
+    Path resolved = validateAndResolvePathWithinRoot(rootReal, requested);
+    rejectTrashPath(rootReal.relativize(resolved));
+    return resolved;
+  }
+
   /**
    * Validates that a path stays within the user's root directory, guarding against path traversal.
    * Existing paths are resolved through symbolic links; for a non-existent path the existing parent
