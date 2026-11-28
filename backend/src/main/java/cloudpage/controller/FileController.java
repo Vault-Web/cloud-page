@@ -9,6 +9,9 @@ import cloudpage.service.FolderService;
 import cloudpage.service.TrashService;
 import cloudpage.service.UserService;
 import cloudpage.util.FileUtils;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,7 +40,7 @@ public class FileController {
   private final FolderService folderService;
   private final TrashService trashService;
 
-  @PostMapping("/upload")
+  @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public UploadResultDto uploadFile(
       @RequestParam String folderPath,
       @RequestParam MultipartFile file,
@@ -98,6 +101,14 @@ public class FileController {
   }
 
   @GetMapping("/view")
+  @ApiResponse(
+      responseCode = "200",
+      description = "File content",
+      content = @Content(mediaType = "*/*", schema = @Schema(type = "string", format = "binary")))
+  @ApiResponse(
+      responseCode = "206",
+      description = "Requested byte range",
+      content = @Content(mediaType = "*/*", schema = @Schema(type = "string", format = "binary")))
   public ResponseEntity<ResourceRegion> viewFile(
       @RequestParam String path, @RequestHeader HttpHeaders headers) throws IOException {
     var user = userService.getCurrentUser();

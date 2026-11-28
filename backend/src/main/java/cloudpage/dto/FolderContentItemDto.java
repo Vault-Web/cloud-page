@@ -1,5 +1,6 @@
 package cloudpage.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,10 +14,16 @@ public class FolderContentItemDto {
   private String path;
   private boolean directory;
   private long size;
+
+  @Schema(types = {"string", "null"})
   private String mimeType;
+
   private long lastModifiedAt;
   private boolean conflict;
+
+  @Schema(types = {"string", "null"})
   private String originalPath;
+
   private boolean duplicate;
 
   public FolderContentItemDto(

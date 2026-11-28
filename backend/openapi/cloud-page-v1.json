@@ -1,0 +1,2466 @@
+{
+  "components" : {
+    "schemas" : {
+      "ChecksumDto" : {
+        "properties" : {
+          "algorithm" : {
+            "type" : "string"
+          },
+          "checksum" : {
+            "type" : "string"
+          },
+          "match" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "CommentDto" : {
+        "properties" : {
+          "authorUsername" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "ownerUsername" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ContentDisposition" : {
+        "properties" : {
+          "attachment" : {
+            "type" : "boolean"
+          },
+          "charset" : {
+            "type" : "string"
+          },
+          "filename" : {
+            "type" : "string"
+          },
+          "formData" : {
+            "type" : "boolean"
+          },
+          "inline" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CreateCommentRequest" : {
+        "properties" : {
+          "content" : {
+            "maxLength" : 8192,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "filePath" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "ownerUsername" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "content", "filePath", "ownerUsername" ],
+        "type" : "object"
+      },
+      "CreateResourceShareRequest" : {
+        "properties" : {
+          "path" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "permissions" : {
+            "items" : {
+              "enum" : [ "VIEW", "DOWNLOAD", "EDIT" ],
+              "type" : "string"
+            },
+            "minItems" : 1,
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "recipientUsername" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "path", "permissions", "recipientUsername" ],
+        "type" : "object"
+      },
+      "CreateSecureSendRequest" : {
+        "properties" : {
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "filePath" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "password" : {
+            "maxLength" : 256,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "filePath" ],
+        "type" : "object"
+      },
+      "DuplicateFileDto" : {
+        "properties" : {
+          "fileName" : {
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FileDto" : {
+        "properties" : {
+          "conflict" : {
+            "type" : "boolean"
+          },
+          "lastModifiedAt" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "mimeType" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "originalPath" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "size" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "FileScanResultDto" : {
+        "properties" : {
+          "detail" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "verdict" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FolderContentItemDto" : {
+        "properties" : {
+          "conflict" : {
+            "type" : "boolean"
+          },
+          "directory" : {
+            "type" : "boolean"
+          },
+          "duplicate" : {
+            "type" : "boolean"
+          },
+          "lastModifiedAt" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "mimeType" : {
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "originalPath" : {
+            "type" : [ "string", "null" ]
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "size" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "FolderDto" : {
+        "properties" : {
+          "files" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FileDto"
+            },
+            "type" : "array"
+          },
+          "folders" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FolderListItemDto"
+            },
+            "type" : "array"
+          },
+          "lastModifiedAt" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FolderListItemDto" : {
+        "properties" : {
+          "directChildrenCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "lastModifiedAt" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "HttpHeaders" : {
+        "properties" : {
+          "accept" : {
+            "items" : {
+              "$ref" : "#/components/schemas/MediaType"
+            },
+            "type" : "array"
+          },
+          "acceptCharset" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "acceptLanguage" : {
+            "items" : {
+              "properties" : {
+                "range" : {
+                  "type" : "string"
+                },
+                "weight" : {
+                  "format" : "double",
+                  "type" : "number"
+                }
+              },
+              "type" : "object"
+            },
+            "type" : "array"
+          },
+          "acceptLanguageAsLocales" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "acceptPatch" : {
+            "items" : {
+              "$ref" : "#/components/schemas/MediaType"
+            },
+            "type" : "array"
+          },
+          "acceptQuery" : {
+            "items" : {
+              "$ref" : "#/components/schemas/MediaType"
+            },
+            "type" : "array"
+          },
+          "accessControlAllowCredentials" : {
+            "type" : "boolean"
+          },
+          "accessControlAllowHeaders" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "accessControlAllowMethods" : {
+            "items" : {
+              "$ref" : "#/components/schemas/HttpMethod"
+            },
+            "type" : "array"
+          },
+          "accessControlAllowOrigin" : {
+            "type" : "string"
+          },
+          "accessControlExposeHeaders" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "accessControlMaxAge" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "accessControlRequestHeaders" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "accessControlRequestMethod" : {
+            "$ref" : "#/components/schemas/HttpMethod"
+          },
+          "all" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object",
+            "writeOnly" : true
+          },
+          "allow" : {
+            "items" : {
+              "$ref" : "#/components/schemas/HttpMethod"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "basicAuth" : {
+            "type" : "string",
+            "writeOnly" : true
+          },
+          "bearerAuth" : {
+            "type" : "string",
+            "writeOnly" : true
+          },
+          "cacheControl" : {
+            "type" : "string"
+          },
+          "connection" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "contentDisposition" : {
+            "$ref" : "#/components/schemas/ContentDisposition"
+          },
+          "contentLanguage" : {
+            "type" : "string"
+          },
+          "contentLength" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "contentType" : {
+            "$ref" : "#/components/schemas/MediaType"
+          },
+          "date" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "etag" : {
+            "type" : "string"
+          },
+          "expires" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "host" : {
+            "properties" : {
+              "address" : {
+                "properties" : {
+                  "address" : {
+                    "format" : "byte",
+                    "type" : "string"
+                  },
+                  "anyLocalAddress" : {
+                    "type" : "boolean"
+                  },
+                  "canonicalHostName" : {
+                    "type" : "string"
+                  },
+                  "hostAddress" : {
+                    "type" : "string"
+                  },
+                  "hostName" : {
+                    "type" : "string"
+                  },
+                  "linkLocalAddress" : {
+                    "type" : "boolean"
+                  },
+                  "loopbackAddress" : {
+                    "type" : "boolean"
+                  },
+                  "mcglobal" : {
+                    "type" : "boolean"
+                  },
+                  "mclinkLocal" : {
+                    "type" : "boolean"
+                  },
+                  "mcnodeLocal" : {
+                    "type" : "boolean"
+                  },
+                  "mcorgLocal" : {
+                    "type" : "boolean"
+                  },
+                  "mcsiteLocal" : {
+                    "type" : "boolean"
+                  },
+                  "multicastAddress" : {
+                    "type" : "boolean"
+                  },
+                  "siteLocalAddress" : {
+                    "type" : "boolean"
+                  }
+                },
+                "type" : "object"
+              },
+              "hostName" : {
+                "type" : "string"
+              },
+              "hostString" : {
+                "type" : "string"
+              },
+              "port" : {
+                "format" : "int32",
+                "type" : "integer"
+              },
+              "unresolved" : {
+                "type" : "boolean"
+              }
+            },
+            "type" : "object"
+          },
+          "ifMatch" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "ifModifiedSince" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "ifNoneMatch" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "ifUnmodifiedSince" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "lastModified" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "location" : {
+            "format" : "uri",
+            "type" : "string"
+          },
+          "origin" : {
+            "type" : "string"
+          },
+          "pragma" : {
+            "type" : "string"
+          },
+          "range" : {
+            "items" : {
+              "$ref" : "#/components/schemas/HttpRange"
+            },
+            "type" : "array"
+          },
+          "upgrade" : {
+            "type" : "string"
+          },
+          "vary" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "HttpMethod" : { },
+      "HttpRange" : { },
+      "MediaType" : {
+        "properties" : {
+          "charset" : {
+            "type" : "string"
+          },
+          "concrete" : {
+            "type" : "boolean"
+          },
+          "parameters" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "qualityValue" : {
+            "format" : "double",
+            "type" : "number"
+          },
+          "subtype" : {
+            "type" : "string"
+          },
+          "subtypeSuffix" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "wildcardSubtype" : {
+            "type" : "boolean"
+          },
+          "wildcardType" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "NotificationDto" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "ownerUsername" : {
+            "type" : "string"
+          },
+          "read" : {
+            "type" : "boolean"
+          },
+          "recipientUsername" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseDtoFolderContentItemDto" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FolderContentItemDto"
+            },
+            "type" : "array"
+          },
+          "pageNumber" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "content", "pageNumber", "totalElements", "totalPages" ],
+        "type" : "object"
+      },
+      "PublicSecureSendDto" : {
+        "properties" : {
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fileName" : {
+            "type" : "string"
+          },
+          "passwordProtected" : {
+            "type" : "boolean"
+          },
+          "resourceType" : {
+            "enum" : [ "FILE", "FOLDER" ],
+            "type" : "string"
+          },
+          "sizeBytes" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ResourceShareDto" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "displayName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "ownerUsername" : {
+            "type" : "string"
+          },
+          "permissions" : {
+            "items" : {
+              "enum" : [ "VIEW", "DOWNLOAD", "EDIT" ],
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "recipientUsername" : {
+            "type" : "string"
+          },
+          "relativePath" : {
+            "type" : "string"
+          },
+          "resourceType" : {
+            "enum" : [ "FILE", "FOLDER" ],
+            "type" : "string"
+          },
+          "revoked" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ScanJobDto" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "error" : {
+            "type" : "string"
+          },
+          "filesScanned" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "findings" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FileScanResultDto"
+            },
+            "type" : "array"
+          },
+          "finishedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "infectedCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "jobId" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SearchFilter" : {
+        "properties" : {
+          "ascending" : {
+            "type" : "boolean"
+          },
+          "maxSize" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "mimeType" : {
+            "type" : "string"
+          },
+          "minSize" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "modifiedAfter" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "modifiedBefore" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sortBy" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SearchResult" : {
+        "properties" : {
+          "lastModifiedAt" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "mimeType" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "score" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SecureSendDto" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fileName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "lastAccessedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "passwordProtected" : {
+            "type" : "boolean"
+          },
+          "requiresNewLink" : {
+            "type" : "boolean"
+          },
+          "resourceType" : {
+            "enum" : [ "FILE", "FOLDER" ],
+            "type" : "string"
+          },
+          "revoked" : {
+            "type" : "boolean"
+          },
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "StreamingResponseBody" : { },
+      "TrashEntryDto" : {
+        "properties" : {
+          "deletedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "originalPath" : {
+            "type" : "string"
+          },
+          "size" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "UploadResultDto" : {
+        "properties" : {
+          "duplicate" : {
+            "type" : "boolean"
+          },
+          "duplicates" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DuplicateFileDto"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "title" : "Cloud Page API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/comments" : {
+      "get" : {
+        "operationId" : "listComments",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "ownerUsername",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "filePath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/CommentDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "comment-controller" ]
+      },
+      "post" : {
+        "operationId" : "addComment",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateCommentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CommentDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "comment-controller" ]
+      }
+    },
+    "/api/comments/{id}" : {
+      "delete" : {
+        "operationId" : "deleteComment",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "comment-controller" ]
+      }
+    },
+    "/api/files" : {
+      "delete" : {
+        "operationId" : "deleteFile",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "filePath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/checksum" : {
+      "get" : {
+        "operationId" : "getFileChecksum",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "expected",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChecksumDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/content" : {
+      "get" : {
+        "operationId" : "getFileContent",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/download" : {
+      "get" : {
+        "operationId" : "downloadFile_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/move" : {
+      "patch" : {
+        "operationId" : "renameOrMoveFile",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "filePath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "newPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/scan" : {
+      "post" : {
+        "operationId" : "startScan",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ScanJobDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "virus-scan-controller" ]
+      }
+    },
+    "/api/files/scan/{jobId}" : {
+      "get" : {
+        "operationId" : "getScan",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "jobId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ScanJobDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "virus-scan-controller" ]
+      }
+    },
+    "/api/files/trash" : {
+      "get" : {
+        "operationId" : "listTrash",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/TrashEntryDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "trash-controller" ]
+      }
+    },
+    "/api/files/trash/{id}" : {
+      "delete" : {
+        "operationId" : "purge",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "trash-controller" ]
+      }
+    },
+    "/api/files/trash/{id}/restore" : {
+      "post" : {
+        "operationId" : "restore",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "trash-controller" ]
+      }
+    },
+    "/api/files/upload" : {
+      "post" : {
+        "operationId" : "uploadFile",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "folderPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "If-Match",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "file" : {
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "file" ],
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UploadResultDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/view" : {
+      "get" : {
+        "operationId" : "viewFile",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "headers",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/HttpHeaders"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "File content"
+          },
+          "206" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Requested byte range"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/folders" : {
+      "delete" : {
+        "operationId" : "deleteFolder",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "folderPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeChildCounts",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FolderDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      },
+      "get" : {
+        "operationId" : "getUserRootFolder",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "includeChildCounts",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FolderDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      },
+      "patch" : {
+        "operationId" : "renameOrMoveFolder",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "folderPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "newPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeChildCounts",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FolderDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      },
+      "post" : {
+        "operationId" : "createFolder_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "parentPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeChildCounts",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FolderDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/folders/content" : {
+      "get" : {
+        "operationId" : "getFolderContent",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "description" : "Zero-based page index",
+          "in" : "query",
+          "name" : "page",
+          "required" : true,
+          "schema" : {
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Requested entries per page",
+          "in" : "query",
+          "name" : "size",
+          "required" : true,
+          "schema" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeDirectorySizes",
+          "required" : false,
+          "schema" : {
+            "default" : true,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeDuplicates",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseDtoFolderContentItemDto"
+                }
+              }
+            },
+            "description" : "Page of folder entries"
+          },
+          "400" : {
+            "description" : "Invalid path or pagination parameters"
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token"
+          },
+          "404" : {
+            "description" : "Folder not found"
+          },
+          "429" : {
+            "description" : "Listing rate limit exceeded"
+          }
+        },
+        "summary" : "List a page from the current user's folder",
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/folders/download" : {
+      "get" : {
+        "operationId" : "downloadFolderArchive",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/zip" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Folder ZIP archive"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/folders/path" : {
+      "get" : {
+        "operationId" : "getFolderByPath",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "includeChildCounts",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FolderDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/folders/search" : {
+      "get" : {
+        "operationId" : "searchInFolder",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "folderPath",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "maxResults",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "minScore",
+          "required" : false,
+          "schema" : {
+            "default" : 60,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "filter",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/SearchFilter"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SearchResult"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/folders/size" : {
+      "get" : {
+        "operationId" : "getFolderSize",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "int64",
+                  "type" : "integer"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "folder-controller" ]
+      }
+    },
+    "/api/notifications" : {
+      "get" : {
+        "operationId" : "listNotifications",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "unreadOnly",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/NotificationDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/notifications/read-all" : {
+      "post" : {
+        "operationId" : "markAllAsRead",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/notifications/{id}/read" : {
+      "post" : {
+        "operationId" : "markAsRead",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/public/secure-sends/{token}" : {
+      "get" : {
+        "operationId" : "download",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Secure-Send-Password",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/public/secure-sends/{token}/content" : {
+      "get" : {
+        "operationId" : "content_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Secure-Send-Password",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/FolderContentItemDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/public/secure-sends/{token}/download-folder" : {
+      "get" : {
+        "operationId" : "downloadFolder_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Secure-Send-Password",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StreamingResponseBody"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/public/secure-sends/{token}/meta" : {
+      "get" : {
+        "operationId" : "describe",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PublicSecureSendDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/public/secure-sends/{token}/view" : {
+      "get" : {
+        "operationId" : "view_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "X-Secure-Send-Password",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/secure-sends" : {
+      "get" : {
+        "operationId" : "list",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SecureSendDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "secure-send-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateSecureSendRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecureSendDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/secure-sends/{id}" : {
+      "delete" : {
+        "operationId" : "revoke_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/secure-sends/{id}/permanent" : {
+      "delete" : {
+        "operationId" : "delete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/secure-sends/{id}/reactivate" : {
+      "post" : {
+        "operationId" : "reactivate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "secure-send-controller" ]
+      }
+    },
+    "/api/shares" : {
+      "get" : {
+        "operationId" : "listOwned",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ResourceShareDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      },
+      "post" : {
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateResourceShareRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ResourceShareDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/shared-with-me" : {
+      "get" : {
+        "operationId" : "listReceived",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ResourceShareDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}" : {
+      "delete" : {
+        "operationId" : "revoke",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/content" : {
+      "get" : {
+        "operationId" : "content",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/FolderContentItemDto"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/download" : {
+      "get" : {
+        "operationId" : "downloadFile",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/download-folder" : {
+      "get" : {
+        "operationId" : "downloadFolder",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StreamingResponseBody"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/edit" : {
+      "put" : {
+        "operationId" : "editFile",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "If-Match",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "file" : {
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "file" ],
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/entry" : {
+      "delete" : {
+        "operationId" : "deleteEntry",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/folder" : {
+      "post" : {
+        "operationId" : "createFolder",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/leave" : {
+      "delete" : {
+        "operationId" : "leave",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/rename" : {
+      "patch" : {
+        "operationId" : "rename",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "newName",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/upload" : {
+      "post" : {
+        "operationId" : "upload",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "file" : {
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "file" ],
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    },
+    "/api/shares/{id}/view" : {
+      "get" : {
+        "operationId" : "view",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "path",
+          "required" : false,
+          "schema" : {
+            "default" : "",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "resource-share-controller" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ],
+  "servers" : [ {
+    "url" : "/"
+  } ]
+}

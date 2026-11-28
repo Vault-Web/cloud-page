@@ -7,6 +7,11 @@ import cloudpage.dto.SearchFilter;
 import cloudpage.dto.SearchResult;
 import cloudpage.service.FolderService;
 import cloudpage.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -36,11 +41,36 @@ public class FolderController {
     return folderService.getFolderTree(user.getRootFolderPath(), includeChildCounts);
   }
 
-  @GetMapping("/content")
+  @GetMapping(value = "/content", produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      operationId = "getFolderContent",
+      summary = "List a page from the current user's folder")
+  @ApiResponse(responseCode = "200", description = "Page of folder entries")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Invalid path or pagination parameters",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "401",
+      description = "Missing or invalid bearer token",
+      content = @Content)
+  @ApiResponse(responseCode = "404", description = "Folder not found", content = @Content)
+  @ApiResponse(
+      responseCode = "429",
+      description = "Listing rate limit exceeded",
+      content = @Content)
   public PageResponseDto<FolderContentItemDto> getFolderContent(
       @RequestParam(required = false, defaultValue = "") String path,
-      @RequestParam int page,
-      @RequestParam int size,
+      @Parameter(
+              description = "Zero-based page index",
+              schema = @Schema(type = "integer", format = "int32", minimum = "0"))
+          @RequestParam
+          int page,
+      @Parameter(
+              description = "Requested entries per page",
+              schema = @Schema(type = "integer", format = "int32", minimum = "1"))
+          @RequestParam
+          int size,
       @RequestParam(required = false) String sort,
       @RequestParam(required = false, defaultValue = "true") boolean includeDirectorySizes,
       @RequestParam(required = false, defaultValue = "false") boolean includeDuplicates)
@@ -78,6 +108,14 @@ public class FolderController {
   }
 
   @GetMapping("/download")
+  @Operation(operationId = "downloadFolderArchive")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Folder ZIP archive",
+      content =
+          @Content(
+              mediaType = "application/zip",
+              schema = @Schema(type = "string", format = "binary")))
   public ResponseEntity<StreamingResponseBody> downloadFolder(
       @RequestParam(required = false, defaultValue = "") String path) throws IOException {
     var user = userService.getCurrentUser();
