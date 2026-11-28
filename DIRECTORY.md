@@ -115,6 +115,7 @@
     - 📁 **java**
       - 📁 **cloudpage**
         - 📄 [ApplicationTests.java](backend/src/test/java/cloudpage/ApplicationTests.java)
+        - 📄 [OpenApiContractTest.java](backend/src/test/java/cloudpage/OpenApiContractTest.java)
         - 📁 **controller**
           - 📄 [CommentControllerTest.java](backend/src/test/java/cloudpage/controller/CommentControllerTest.java)
           - 📄 [FileControllerTest.java](backend/src/test/java/cloudpage/controller/FileControllerTest.java)
@@ -132,6 +133,8 @@
           - 📄 [ClamAvVirusScannerIntegrationTest.java](backend/src/test/java/cloudpage/scan/ClamAvVirusScannerIntegrationTest.java)
           - 📄 [ClamAvVirusScannerTest.java](backend/src/test/java/cloudpage/scan/ClamAvVirusScannerTest.java)
           - 📄 [VirusScanServiceTest.java](backend/src/test/java/cloudpage/scan/VirusScanServiceTest.java)
+        - 📁 **security**
+          - 📄 [JwtUtilConfigurationTest.java](backend/src/test/java/cloudpage/security/JwtUtilConfigurationTest.java)
         - 📁 **service**
           - 📄 [CommentServiceTest.java](backend/src/test/java/cloudpage/service/CommentServiceTest.java)
           - 📄 [DuplicateDetectionReliabilityTest.java](backend/src/test/java/cloudpage/service/DuplicateDetectionReliabilityTest.java)
